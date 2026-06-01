@@ -1,0 +1,19 @@
+{
+  "name": "Rainland - Auto Assign Lead on Create",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "rainland/lead-created", "responseMode": "onReceived" },
+      "id": "1", "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.RAINLAND_API}}/leads",
+        "sendBody": true, "contentType": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "id": "2", "name": "Create Lead in CRM", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [520, 300]
+    }
+  ],
+  "connections": { "Webhook": { "main": [[ { "node": "Create Lead in CRM", "type": "main", "index": 0 } ]] } }
+}

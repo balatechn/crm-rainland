@@ -1,0 +1,265 @@
+// Rainland CRM - Prisma schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+enum Role {
+  ADMIN
+  CRM_MANAGER
+  CALL_CENTER
+  SALES_HEAD
+  BRANCH_MANAGER
+  SALES_EXECUTIVE
+  TEAM_LEADER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  INTERESTED
+  TEST_DRIVE_SCHEDULED
+  TEST_DRIVE_COMPLETED
+  QUOTATION_SENT
+  NEGOTIATION
+  BOOKING_CONFIRMED
+  FINANCE_APPROVAL
+  DELIVERY_SCHEDULED
+  DELIVERED
+  LOST
+}
+
+enum VehicleBrand {
+  MONTRA
+  ISUZU
+}
+
+enum WhatsAppDirection {
+  INBOUND
+  OUTBOUND
+}
+
+// ============ MASTERS ============
+model Branch {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  city      String
+  pincode   String?
+  address   String?
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users     User[]
+  leads     Lead[]
+  vehicles  Vehicle[] @relation("BranchVehicles")
+}
+
+model Vehicle {
+  id          String       @id @default(cuid())
+  brand       VehicleBrand
+  model       String
+  variant     String?
+  basePrice   Float        @default(0)
+  active      Boolean      @default(true)
+  branches    Branch[]     @relation("BranchVehicles")
+
+  leads       Lead[]
+  testDrives  TestDrive[]
+  quotations  Quotation[]
+  bookings    Booking[]
+  deliveries  Delivery[]
+
+  @@unique([brand, model, variant])
+}
+
+model LeadSource {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  active Boolean @default(true)
+  leads  Lead[]
+}
+
+// ============ USERS / AUTH ============
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  role         Role
+  active       Boolean    @default(true)
+  twoFactorOn  Boolean    @default(false)
+  branchId     String?
+  branch       Branch?    @relation(fields: [branchId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  assignedLeads   Lead[]         @relation("AssignedExecutive")
+  testDrives      TestDrive[]
+  quotations      Quotation[]
+  bookings        Booking[]
+  deliveries      Delivery[]
+  activities      Activity[]
+  loginHistory    LoginHistory[]
+  auditLogs       AuditLog[]
+  whatsappLogs    WhatsAppMessage[]
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  ip        String?
+  userAgent String?
+  loggedAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+// ============ CRM CORE ============
+model Lead {
+  id              String      @id @default(cuid())
+  name            String
+  mobile          String
+  email           String?
+  city            String?
+  pincode         String?
+  notes           String?
+  status          LeadStatus  @default(NEW)
+  sourceId        String
+  source          LeadSource  @relation(fields: [sourceId], references: [id])
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id])
+  vehicleId       String?
+  vehicle         Vehicle?    @relation(fields: [vehicleId], references: [id])
+  assignedToId    String?
+  assignedTo      User?       @relation("AssignedExecutive", fields: [assignedToId], references: [id])
+  lastContactedAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  activities    Activity[]
+  testDrives    TestDrive[]
+  quotations    Quotation[]
+  bookings      Booking[]
+  deliveries    Delivery[]
+  whatsappLogs  WhatsAppMessage[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([mobile])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // CALL / NOTE / VISIT / STATUS_CHANGE
+  note      String?
+  gpsLat    Float?
+  gpsLng    Float?
+  createdAt DateTime @default(now())
+}
+
+model TestDrive {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  executiveId String
+  executive   User     @relation(fields: [executiveId], references: [id])
+  scheduledAt DateTime
+  completed   Boolean  @default(false)
+  feedback    String?
+  createdAt   DateTime @default(now())
+}
+
+model Quotation {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id])
+  vehicleId     String
+  vehicle       Vehicle  @relation(fields: [vehicleId], references: [id])
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  basePrice     Float
+  accessories   Float    @default(0)
+  insurance     Float    @default(0)
+  roadTax       Float    @default(0)
+  discount      Float    @default(0)
+  total         Float
+  pdfPath       String?
+  createdAt     DateTime @default(now())
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id])
+  vehicleId     String
+  vehicle       Vehicle  @relation(fields: [vehicleId], references: [id])
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  bookingAmount Float
+  bookingDate   DateTime
+  paymentMethod String   // CASH / CARD / UPI / BANK / FINANCE
+  financeOption String?
+  createdAt     DateTime @default(now())
+
+  delivery      Delivery?
+}
+
+model Delivery {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id])
+  leadId          String
+  lead            Lead     @relation(fields: [leadId], references: [id])
+  vehicleId       String
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+  createdById     String
+  createdBy       User     @relation(fields: [createdById], references: [id])
+  deliveryDate    DateTime
+  registrationNo  String?
+  photos          String[] // URLs
+  customerFeedback String?
+  createdAt       DateTime @default(now())
+}
+
+model WhatsAppMessage {
+  id        String            @id @default(cuid())
+  leadId    String?
+  lead      Lead?             @relation(fields: [leadId], references: [id])
+  userId    String?
+  user      User?             @relation(fields: [userId], references: [id])
+  mobile    String
+  direction WhatsAppDirection
+  body      String
+  status    String?           // sent / delivered / read / failed / received
+  campaign  String?
+  createdAt DateTime          @default(now())
+
+  @@index([mobile])
+  @@index([leadId])
+}

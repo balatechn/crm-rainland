@@ -1,0 +1,19 @@
+{
+  "name": "Rainland - WhatsApp Inbound -> Lead Capture",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "rainland/whatsapp-inbound", "responseMode": "onReceived" },
+      "id": "1", "name": "WA Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.RAINLAND_API}}/whatsapp/webhook",
+        "sendBody": true, "contentType": "json",
+        "jsonBody": "={ \"mobile\": \"{{$json.from}}\", \"body\": \"{{$json.text}}\", \"name\": \"{{$json.profile_name}}\" }"
+      },
+      "id": "2", "name": "Forward to CRM", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [520, 300]
+    }
+  ],
+  "connections": { "WA Webhook": { "main": [[{ "node": "Forward to CRM", "type": "main", "index": 0 }]] } }
+}

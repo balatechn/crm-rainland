@@ -1,0 +1,38 @@
+{
+  "name": "Rainland - Follow-Up Reminder (>48h no update)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [ { "field": "hours", "hoursInterval": 6 } ] } },
+      "id": "1", "name": "Every 6h", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1, "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.RAINLAND_API}}/dashboard/followups",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{$env.RAINLAND_TOKEN}}" }] }
+      },
+      "id": "2", "name": "Fetch Pending Follow-ups", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [480, 300]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "3", "name": "Split Leads", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3, "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.RAINLAND_API}}/whatsapp/send",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{$env.RAINLAND_TOKEN}}" }] },
+        "sendBody": true, "contentType": "json",
+        "jsonBody": "={ \"leadId\": \"{{$json.id}}\", \"mobile\": \"{{$json.mobile}}\", \"body\": \"Hi {{$json.name}}, this is Rainland Auto. Just checking in regarding your enquiry. Reply STOP to opt out.\" }"
+      },
+      "id": "4", "name": "Send WhatsApp Reminder", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Every 6h": { "main": [[{ "node": "Fetch Pending Follow-ups", "type": "main", "index": 0 }]] },
+    "Fetch Pending Follow-ups": { "main": [[{ "node": "Split Leads", "type": "main", "index": 0 }]] },
+    "Split Leads": { "main": [[{ "node": "Send WhatsApp Reminder", "type": "main", "index": 0 }]] }
+  }
+}

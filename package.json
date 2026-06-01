@@ -1,0 +1,21 @@
+{
+  "name": "rainland-crm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Rainland Auto Corp CRM - Montra & Isuzu Dealership Operations",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all -p dev:api dev:web",
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "db:migrate": "npm --workspace apps/api run db:migrate",
+    "db:seed": "npm --workspace apps/api run db:seed",
+    "db:reset": "npm --workspace apps/api run db:reset"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}

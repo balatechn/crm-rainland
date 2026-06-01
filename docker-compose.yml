@@ -1,0 +1,32 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: rainland-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rainland
+      POSTGRES_PASSWORD: rainland
+      POSTGRES_DB: rainland_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - rainland_pgdata:/var/lib/postgresql/data
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: rainland-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+    volumes:
+      - rainland_n8n:/home/node/.n8n
+      - ./automation:/automation
+
+volumes:
+  rainland_pgdata:
+  rainland_n8n:

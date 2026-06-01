@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html, body { height: 100%; }
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* shadcn-ish primitives */
+.btn { @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition border; }
+.btn-primary { @apply bg-brand text-white border-brand hover:bg-brand-dark; }
+.btn-ghost { @apply bg-transparent border-transparent hover:bg-gray-100; }
+.btn-outline { @apply bg-white border-gray-300 hover:bg-gray-50; }
+.input, .select, .textarea {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand;
+}
+.card { @apply bg-white rounded-xl border border-gray-200 shadow-sm; }
+.badge { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium; }
+.table { @apply w-full text-sm; }
+.table th { @apply text-left text-xs font-semibold text-gray-500 uppercase px-3 py-2 bg-gray-50 border-b; }
+.table td { @apply px-3 py-2 border-b border-gray-100; }

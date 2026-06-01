@@ -1,0 +1,123 @@
+# Coolify-ready stack for Rainland CRM backend
+# Import this in Coolify → New Resource → Docker Compose
+# Set the env vars listed at the bottom in Coolify's UI (don't commit them).
+#
+# Services:
+#   db            - PostgreSQL 15 (shared by api, n8n, evolution)
+#   api           - Rainland NestJS API (built from ./apps/api)
+#   n8n           - Workflow automation
+#   evolution-api - WhatsApp Business gateway (Evolution API v2)
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - rainland_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: "7d"
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      WHATSAPP_API_URL: http://evolution-api:8080
+      WHATSAPP_API_TOKEN: ${EVOLUTION_API_KEY}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_INSTANCE}
+    expose:
+      - "4000"
+    # Coolify will expose this with a public URL via its proxy.
+    labels:
+      - coolify.managed=true
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      N8N_HOST: ${N8N_HOST}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_HOST}/
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      RAINLAND_API: http://api:4000/api
+      RAINLAND_TOKEN: ${RAINLAND_SERVICE_TOKEN}
+    volumes:
+      - rainland_n8n:/home/node/.n8n
+    expose:
+      - "5678"
+
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      CORS_ORIGIN: "*"
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: http://api:4000/api/whatsapp/webhook
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+    volumes:
+      - rainland_evolution:/evolution/instances
+    expose:
+      - "8080"
+
+volumes:
+  rainland_pgdata:
+  rainland_n8n:
+  rainland_evolution:
+
+# ----------------------------------------------------------------------
+# Required env vars (configure in Coolify > Application > Environment):
+#
+#   POSTGRES_USER             rainland
+#   POSTGRES_PASSWORD         <strong-random>
+#   POSTGRES_DB               rainland_crm
+#   JWT_SECRET                <32+ char random>
+#   WEB_ORIGIN                https://crm.your-domain.com
+#   N8N_HOST                  n8n.your-domain.com
+#   N8N_USER                  admin
+#   N8N_PASSWORD              <strong-random>
+#   EVOLUTION_API_KEY         <strong-random>     (acts as WHATSAPP_API_TOKEN for api)
+#   WHATSAPP_INSTANCE         rainland            (Evolution instance name)
+#   RAINLAND_SERVICE_TOKEN    <jwt-from-admin-login> (used by n8n flows)
+# ----------------------------------------------------------------------
