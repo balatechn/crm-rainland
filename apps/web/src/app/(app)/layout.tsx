@@ -72,15 +72,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
+      <header className="sticky top-0 z-30 bg-navy border-b border-navy-light">
         <div className="max-w-screen-2xl mx-auto px-3 lg:px-6 h-14 flex items-center gap-4">
           {/* Logo + brand */}
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={LOGO} alt="Rainland Autocorp" className="h-8 w-auto" />
+            <img src={LOGO} alt="Rainland Autocorp" className="h-8 w-auto brightness-0 invert" />
             <div className="hidden sm:block leading-tight">
-              <div className="text-sm font-bold text-brand-dark tracking-wide">RAINLAND</div>
-              <div className="text-[10px] text-gray-500 -mt-0.5">CRM · Montra · Isuzu</div>
+              <div className="text-sm font-bold text-white tracking-wide">RAINLAND</div>
+              <div className="text-[10px] text-navy-muted -mt-0.5">CRM · Montra · Isuzu</div>
             </div>
           </Link>
 
@@ -92,7 +92,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               return (
                 <Link key={item.href} href={item.href}
                   className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap',
-                    active ? 'bg-brand text-white' : 'text-gray-700 hover:bg-gray-100')}>
+                    active ? 'bg-white/20 text-white' : 'text-navy-muted hover:bg-white/10 hover:text-white')}>
                   <Icon size={15} />
                   <span>{item.label}</span>
                 </Link>
@@ -105,8 +105,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   onClick={() => setMastersOpen(v => !v)}
                   className={cn('flex items-center gap-1 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap',
                     masters.some(m => pathname?.startsWith(m.href))
-                      ? 'bg-brand text-white'
-                      : 'text-gray-700 hover:bg-gray-100')}>
+                      ? 'bg-white/20 text-white'
+                      : 'text-navy-muted hover:bg-white/10 hover:text-white')}>
                   Admin <ChevronDown size={14} className={cn('transition-transform', mastersOpen && 'rotate-180')} />
                 </button>
                 {mastersOpen && (
@@ -135,15 +135,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="relative" ref={profileRef}>
             <button
               onClick={() => setProfileOpen(v => !v)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100">
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/10">
               <div className="h-8 w-8 rounded-full bg-brand text-white flex items-center justify-center text-sm font-semibold">
                 {(user?.name || '?').slice(0,1).toUpperCase()}
               </div>
               <div className="hidden md:block text-left leading-tight">
-                <div className="text-sm font-medium text-gray-800">{user?.name || '...'}</div>
-                <div className="text-[11px] text-gray-500">{user?.role}{user?.branch ? ' · '+user.branch : ''}</div>
+                <div className="text-sm font-medium text-white">{user?.name || '...'}</div>
+                <div className="text-[11px] text-navy-muted">{user?.role}{user?.branch ? ' · '+user.branch : ''}</div>
               </div>
-              <ChevronDown size={14} className="hidden md:block text-gray-400" />
+              <ChevronDown size={14} className="hidden md:block text-navy-muted" />
             </button>
             {profileOpen && (
               <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-40">
@@ -162,7 +162,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Mobile menu button */}
           <button
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden p-2 rounded-md hover:bg-gray-100"
+            className="lg:hidden p-2 rounded-md hover:bg-white/10 text-white"
             aria-label="Open menu">
             <Menu size={20}/>
           </button>
