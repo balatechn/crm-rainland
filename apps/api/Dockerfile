@@ -15,4 +15,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY package.json ./
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# db push creates the schema directly (no migration files required).
+# Seed runs only on first boot (when SEED_ON_BOOT=true).
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && (if [ \"$SEED_ON_BOOT\" = \"true\" ]; then npx prisma db seed || true; fi) && node dist/main.js"]

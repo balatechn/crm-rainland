@@ -12,6 +12,9 @@
     "db:reset": "prisma migrate reset --force",
     "prisma:generate": "prisma generate"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",
