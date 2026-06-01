@@ -27,7 +27,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true); setSaved(false);
     try {
-      const updated = await api<User>('/auth/profile', { method: 'PATCH', body: { name } });
+      const updated = await api<User>('/auth/profile', { method: 'PATCH', body: JSON.stringify({ name }) });
       setUser(u => u ? { ...u, name: updated.name } : u);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -42,7 +42,7 @@ export default function ProfilePage() {
     setPwdSaving(true); setPwdMsg(null);
     try {
       const res = await api<{ message: string }>('/auth/change-password', {
-        method: 'POST', body: { oldPassword: oldPwd, newPassword: newPwd },
+        method: 'POST', body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
       });
       setPwdMsg({ ok: true, text: res.message });
       setOldPwd(''); setNewPwd(''); setConfPwd('');

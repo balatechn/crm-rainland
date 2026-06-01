@@ -49,7 +49,7 @@ export default function FinancePage() {
 
   const updateStatus = async (id: string, status: string) => {
     try {
-      await api(`/finance/${id}`, { method: 'PATCH', body: { status } });
+      await api(`/finance/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
       load();
     } catch { /* ignore */ }
   };
@@ -176,7 +176,7 @@ function NewFinanceButton({ onCreated }: { onCreated: () => void }) {
     try {
       await api('/finance', {
         method: 'POST',
-        body: {
+        body: JSON.stringify({
           leadId,
           bankName: bankName || undefined,
           loanAmount: loanAmount ? Number(loanAmount) : undefined,
@@ -184,7 +184,7 @@ function NewFinanceButton({ onCreated }: { onCreated: () => void }) {
           tenure: tenure ? Number(tenure) : undefined,
           downPayment: downPayment ? Number(downPayment) : undefined,
           remarks: remarks || undefined,
-        },
+        }),
       });
       setOpen(false); setLeadId(''); setBankName(''); setLoan(''); setEmi(''); setTenure(''); setDown(''); setRemarks('');
       onCreated();

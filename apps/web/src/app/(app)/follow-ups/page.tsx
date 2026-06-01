@@ -48,7 +48,7 @@ export default function FollowUpsPage() {
   const markDone = async (id: string) => {
     setCompleting(id);
     try {
-      await api(`/follow-ups/${id}/complete`, { method: 'PATCH', body: {} });
+      await api(`/follow-ups/${id}/complete`, { method: 'PATCH', body: JSON.stringify({}) });
       load();
     } catch { /* ignore */ }
     setCompleting(null);
@@ -153,7 +153,7 @@ function NewFollowUpButton({ onCreated }: { onCreated: () => void }) {
     if (!leadId || !dt) return;
     setSaving(true);
     try {
-      await api('/follow-ups', { method: 'POST', body: { leadId, type, scheduledAt: dt, note } });
+      await api('/follow-ups', { method: 'POST', body: JSON.stringify({ leadId, type, scheduledAt: dt, note }) });
       setOpen(false); setLeadId(''); setDt(''); setNote('');
       onCreated();
     } catch { /* ignore */ }
