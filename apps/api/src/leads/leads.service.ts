@@ -7,6 +7,7 @@ import { branchScopeWhere } from '../common/scope';
 export interface CreateLeadDto {
   name: string;
   mobile: string;
+  alternateMobile?: string;
   email?: string;
   city?: string;
   pincode?: string;
@@ -49,10 +50,13 @@ export class LeadsService {
         source: true, branch: true, vehicle: true,
         assignedTo: { select: { id:true, name:true, email:true } },
         activities: { orderBy: { createdAt:'desc' }, include: { user: { select: { name:true } } } },
+        followUps: { orderBy: { scheduledAt:'asc' }, include: { user: { select: { id:true, name:true } } } },
         testDrives: { include: { vehicle:true, executive: { select: { name:true } } } },
         quotations: true,
         bookings: true,
         deliveries: true,
+        finances: true,
+        documents: { include: { uploadedBy: { select: { name:true } } } },
         whatsappLogs: { orderBy: { createdAt:'desc' }, take: 50 },
       },
     });
@@ -85,7 +89,7 @@ export class LeadsService {
 
     return this.prisma.lead.create({
       data: {
-        name: dto.name, mobile: dto.mobile, email: dto.email, city: dto.city, pincode: dto.pincode,
+        name: dto.name, mobile: dto.mobile, alternateMobile: dto.alternateMobile, email: dto.email, city: dto.city, pincode: dto.pincode,
         notes: dto.notes, sourceId, branchId, vehicleId: dto.vehicleId, assignedToId,
       },
       include: { source:true, branch:true, vehicle:true, assignedTo:{ select:{ id:true,name:true } } },

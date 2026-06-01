@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 
 export default function NewLeadPage() {
   const router = useRouter();
-  const [form, setForm] = useState<any>({ name:'', mobile:'', email:'', city:'', pincode:'', notes:'', sourceId:'', branchId:'', vehicleId:'' });
+  const [form, setForm] = useState<any>({ name:'', mobile:'', alternateMobile:'', email:'', city:'', pincode:'', notes:'', sourceId:'', branchId:'', vehicleId:'' });
   const [sources, setSources] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
@@ -35,6 +35,7 @@ export default function NewLeadPage() {
       <form onSubmit={submit} className="card p-4 grid md:grid-cols-2 gap-3">
         <div><label className="text-sm">Name *</label><input className="input mt-1" required value={form.name} onChange={e=>set('name', e.target.value)} /></div>
         <div><label className="text-sm">Mobile *</label><input className="input mt-1" required value={form.mobile} onChange={e=>set('mobile', e.target.value)} /></div>
+        <div><label className="text-sm">Alternate Mobile</label><input className="input mt-1" value={form.alternateMobile} onChange={e=>set('alternateMobile', e.target.value)} /></div>
         <div><label className="text-sm">Email</label><input className="input mt-1" type="email" value={form.email} onChange={e=>set('email', e.target.value)} /></div>
         <div><label className="text-sm">City</label><input className="input mt-1" value={form.city} onChange={e=>set('city', e.target.value)} /></div>
         <div><label className="text-sm">Pincode</label><input className="input mt-1" value={form.pincode} onChange={e=>set('pincode', e.target.value)} /></div>

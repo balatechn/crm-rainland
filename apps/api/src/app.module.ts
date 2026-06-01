@@ -16,6 +16,10 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { AuditModule } from './audit/audit.module';
 import { BootstrapModule } from './bootstrap/bootstrap.module';
+import { FollowUpsModule } from './follow-ups/follow-ups.module';
+import { FinanceModule } from './finance/finance.module';
+import { DocumentsModule } from './documents/documents.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -27,6 +31,10 @@ import { BootstrapModule } from './bootstrap/bootstrap.module';
     VehiclesModule,
     LeadSourcesModule,
     LeadsModule,
+    FollowUpsModule,
+    FinanceModule,
+    DocumentsModule,
+    NotificationsModule,
     TestDrivesModule,
     QuotationsModule,
     BookingsModule,

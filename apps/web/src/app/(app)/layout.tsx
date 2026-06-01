@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, Phone, FileText, Car, Building2,
   CalendarCheck, ClipboardList, Truck, MessageCircle, BarChart3,
   LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
+  BellRing, Landmark, UserCircle,
 } from 'lucide-react';
 import { getToken, getUser, setToken, setUser } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -18,9 +19,11 @@ const PRIMARY: NavItem[] = [
   { href: '/dashboard',    label: 'Dashboard',     icon: LayoutDashboard },
   { href: '/leads',        label: 'Leads',         icon: Users },
   { href: '/pipeline',     label: 'Pipeline',      icon: ClipboardList },
+  { href: '/follow-ups',   label: 'Follow-ups',    icon: BellRing },
   { href: '/test-drives',  label: 'Test Drives',   icon: CalendarCheck },
   { href: '/quotations',   label: 'Quotations',    icon: FileText },
   { href: '/bookings',     label: 'Bookings',      icon: Tag },
+  { href: '/finance',      label: 'Finance',       icon: Landmark },
   { href: '/deliveries',   label: 'Deliveries',    icon: Truck },
   { href: '/whatsapp',     label: 'WhatsApp',      icon: MessageCircle },
   { href: '/reports',      label: 'Reports',       icon: BarChart3 },
@@ -151,6 +154,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="text-sm font-medium">{user?.name}</div>
                   <div className="text-xs text-gray-500">{user?.email}</div>
                 </div>
+                <Link href="/profile" onClick={() => setProfileOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                  <UserCircle size={15}/> My Profile
+                </Link>
                 <button onClick={logout}
                   className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
                   <LogOut size={15}/> Logout
@@ -211,6 +218,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
             </nav>
             <button onClick={logout} className="btn btn-outline w-full mt-2"><LogOut size={14}/> Logout</button>
+            <Link href="/profile" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md">
+              <UserCircle size={14}/> My Profile
+            </Link>
           </div>
         </div>
       )}

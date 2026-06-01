@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 
@@ -15,5 +15,17 @@ export class AuthController {
   @Get('me')
   me(@Req() req: any) {
     return this.auth.me(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  updateProfile(@Req() req: any, @Body() body: { name?: string }) {
+    return this.auth.updateProfile(req.user.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  changePassword(@Req() req: any, @Body() body: { oldPassword: string; newPassword: string }) {
+    return this.auth.changePassword(req.user.id, body.oldPassword, body.newPassword);
   }
 }

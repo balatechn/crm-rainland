@@ -106,9 +106,12 @@ model User {
   bookings        Booking[]
   deliveries      Delivery[]
   activities      Activity[]
+  followUps       FollowUp[]
   loginHistory    LoginHistory[]
   auditLogs       AuditLog[]
   whatsappLogs    WhatsAppMessage[]
+  documents       Document[]
+  notifications   Notification[]
 }
 
 model LoginHistory {
@@ -153,12 +156,17 @@ model Lead {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  alternateMobile String?
+
   activities    Activity[]
+  followUps     FollowUp[]
   testDrives    TestDrive[]
   quotations    Quotation[]
   bookings      Booking[]
   deliveries    Delivery[]
   whatsappLogs  WhatsAppMessage[]
+  finances      Finance[]
+  documents     Document[]
 
   @@index([branchId])
   @@index([status])
@@ -177,6 +185,24 @@ model Activity {
   gpsLat    Float?
   gpsLng    Float?
   createdAt DateTime @default(now())
+}
+
+model FollowUp {
+  id          String    @id @default(cuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  type        String    // CALL / WHATSAPP / VISIT / EMAIL
+  scheduledAt DateTime
+  completedAt DateTime?
+  note        String?
+  status      String    @default("PENDING") // PENDING / DONE / MISSED
+  createdAt   DateTime  @default(now())
+
+  @@index([leadId])
+  @@index([scheduledAt])
+  @@index([userId])
 }
 
 model TestDrive {
@@ -228,6 +254,7 @@ model Booking {
   createdAt     DateTime @default(now())
 
   delivery      Delivery?
+  finance       Finance?
 }
 
 model Delivery {
@@ -245,6 +272,54 @@ model Delivery {
   photos          String[] // URLs
   customerFeedback String?
   createdAt       DateTime @default(now())
+}
+
+model Finance {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  bookingId   String?  @unique
+  booking     Booking? @relation(fields: [bookingId], references: [id])
+  bankName    String?
+  loanAmount  Float?
+  emi         Float?
+  tenure      Int?
+  downPayment Float?
+  status      String   @default("APPLIED") // APPLIED / APPROVED / REJECTED / DISBURSED
+  remarks     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadId])
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type         String   // AADHAAR / PAN / DRIVING_LICENSE / FINANCE / PHOTO / OTHER
+  url          String
+  name         String?
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String   // LEAD / FOLLOWUP / BOOKING / DELIVERY / SYSTEM
+  entityId  String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
 }
 
 model WhatsAppMessage {

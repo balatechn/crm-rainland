@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.module';
@@ -32,5 +32,23 @@ export class AuthService {
       where: { id: userId },
       select: { id: true, name: true, email: true, role: true, branchId: true, branch: { select: { name: true } } },
     });
+  }
+
+  async updateProfile(userId: string, data: { name?: string; phone?: string }) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { ...(data.name ? { name: data.name } : {}) },
+      select: { id: true, name: true, email: true, role: true, branchId: true },
+    });
+  }
+
+  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const ok = await bcrypt.compare(oldPassword, user!.passwordHash);
+    if (!ok) throw new BadRequestException('Current password is incorrect');
+    if (newPassword.length < 6) throw new BadRequestException('New password must be at least 6 characters');
+    const hash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: hash } });
+    return { message: 'Password changed successfully' };
   }
 }
