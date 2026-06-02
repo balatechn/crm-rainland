@@ -6,8 +6,7 @@ import {
   LayoutDashboard, Users, Phone, FileText, Car, Building2,
   CalendarCheck, ClipboardList, Truck, MessageCircle, BarChart3,
   LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
-  Bell, Search, UserCircle, Landmark, MapPin, Handshake,
-  Store, BellRing, MessagesSquare,
+  Bell, Search, UserCircle, Landmark, Store, BellRing,
 } from 'lucide-react';
 import { getToken, getUser, setToken, setUser } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -23,8 +22,6 @@ const SALES_ITEMS: NavItem[] = [
   { href: '/follow-ups',  label: 'Follow-Ups',   icon: BellRing },
   { href: '/test-drives', label: 'Test Drives',  icon: CalendarCheck },
   { href: '/pipeline',    label: 'Pipeline',     icon: ClipboardList },
-  { href: '/deals',       label: 'Deals',        icon: Handshake },
-  { href: '/lead-map',    label: 'Lead Map',     icon: MapPin },
 ];
 
 const OPERATIONS_ITEMS: NavItem[] = [
@@ -114,7 +111,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [onlineOpen, setOnlineOpen] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
+  const onlineRef  = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!getToken()) { router.replace('/login'); return; }
@@ -124,10 +124,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+      if (onlineRef.current  && !onlineRef.current.contains(e.target as Node))  setOnlineOpen(false);
     }
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
+
+  function openOnlineUsers() {
+    if (!onlineOpen) {
+      api<any[]>('/users').then(list => setOnlineUsers((list || []).filter((u: any) => u.active)));
+    }
+    setOnlineOpen(v => !v);
+  }
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
@@ -180,12 +188,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               WhatsApp
             </Link>
 
-            {/* Team Chat (placeholder) */}
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap text-slate-300 hover:text-white hover:bg-white/10 transition-colors">
-              <MessagesSquare size={14} />
-              Team Chat
-            </button>
-
             {/* Dropdowns */}
             <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
             <DropdownMenu label="Operations"   items={OPERATIONS_ITEMS}   pathname={pathname} user={user} />
@@ -205,6 +207,44 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               <Search size={18} />
             </button>
+
+            {/* Online users — Admin only */}
+            {user?.role === 'ADMIN' && (
+              <div className="relative" ref={onlineRef}>
+                <button
+                  onClick={openOnlineUsers}
+                  className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors relative"
+                  aria-label="Online users"
+                >
+                  <Users size={18} />
+                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-green-400" />
+                </button>
+                {onlineOpen && (
+                  <div className="absolute right-0 mt-1.5 w-64 bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Active Users ({onlineUsers.length})
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {onlineUsers.length === 0 && (
+                        <p className="px-4 py-3 text-sm text-gray-400">No active users</p>
+                      )}
+                      {onlineUsers.map(u => (
+                        <div key={u.id} className="flex items-center gap-3 px-4 py-2.5">
+                          <div className="h-7 w-7 rounded-full bg-navy text-white flex items-center justify-center text-xs font-bold shrink-0">
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{u.name}</div>
+                            <div className="text-xs text-gray-400">{u.role.replace(/_/g, ' ')}{u.branch ? ` · ${u.branch.name}` : ''}</div>
+                          </div>
+                          <span className="ml-auto h-2 w-2 rounded-full bg-green-400 shrink-0" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Bell */}
             <button className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors relative" aria-label="Notifications">

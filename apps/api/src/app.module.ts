@@ -20,6 +20,7 @@ import { FollowUpsModule } from './follow-ups/follow-ups.module';
 import { FinanceModule } from './finance/finance.module';
 import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { WalkInsModule } from './walk-ins/walk-ins.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     FinanceModule,
     DocumentsModule,
     NotificationsModule,
+    WalkInsModule,
     TestDrivesModule,
     QuotationsModule,
     BookingsModule,

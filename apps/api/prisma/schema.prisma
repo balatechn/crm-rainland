@@ -59,6 +59,7 @@ model Branch {
   users     User[]
   leads     Lead[]
   vehicles  Vehicle[] @relation("BranchVehicles")
+  walkIns   WalkIn[]
 }
 
 model Vehicle {
@@ -75,6 +76,7 @@ model Vehicle {
   quotations  Quotation[]
   bookings    Booking[]
   deliveries  Delivery[]
+  walkIns     WalkIn[]
 
   @@unique([brand, model, variant])
 }
@@ -112,6 +114,7 @@ model User {
   whatsappLogs    WhatsAppMessage[]
   documents       Document[]
   notifications   Notification[]
+  walkIns         WalkIn[]       @relation("WalkInExecutive")
 }
 
 model LoginHistory {
@@ -320,6 +323,25 @@ model Notification {
 
   @@index([userId])
   @@index([read])
+}
+
+model WalkIn {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String
+  email        String?
+  vehicleId    String?
+  vehicle      Vehicle? @relation(fields: [vehicleId], references: [id])
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id])
+  testDrive    Boolean  @default(false)
+  notes        String?
+  assignedToId String?
+  assignedTo   User?    @relation("WalkInExecutive", fields: [assignedToId], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([branchId])
+  @@index([phone])
 }
 
 model WhatsAppMessage {
