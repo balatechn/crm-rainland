@@ -172,7 +172,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center flex-1">
             {navLink('/dashboard', 'Dashboard', LayoutDashboard, true)}
-            {navLink('/whatsapp',  'WhatsApp',  MessageCircle)}
+            {(['CALL_CENTER','ADMIN'] as string[]).includes(user?.role) && navLink('/whatsapp', 'WhatsApp', MessageCircle)}
             <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
             <DropdownMenu label="Operations"   items={OPERATIONS_ITEMS}   pathname={pathname} user={user} />
             <DropdownMenu label="Reports"      items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
@@ -304,7 +304,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
               {[
                 { href:'/dashboard', label:'Dashboard', Icon:LayoutDashboard },
-                { href:'/whatsapp',  label:'WhatsApp',  Icon:MessageCircle  },
+                ...((['CALL_CENTER','ADMIN'] as string[]).includes(user?.role)
+                  ? [{ href:'/whatsapp', label:'WhatsApp', Icon:MessageCircle }]
+                  : []),
               ].map(({ href, label, Icon }) => (
                 <Link key={href} href={href}
                   className={cn('flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors',

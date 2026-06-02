@@ -1,4 +1,4 @@
-import { Module, Controller, Get, Query, Req, UseGuards, Injectable } from '@nestjs/common';
+import { Module, Controller, Get, Param, Query, Req, UseGuards, Injectable } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/jwt.guard';
 import { PrismaService } from '../prisma/prisma.module';
 import { LeadStatus, Role } from '@prisma/client';
@@ -58,6 +58,25 @@ class DashboardService {
     });
   }
 
+  async execStats(userId: string) {
+    const [totalLeads, myLeads, testDrives, pendingFollowups] = await Promise.all([
+      this.prisma.lead.count({ where: { assignedToId: userId } }),
+      this.prisma.lead.count({ where: { assignedToId: userId, createdAt: { gte: new Date(Date.now() - 30*24*3600*1000) } } }),
+      this.prisma.testDrive.count({ where: { executiveId: userId } }),
+      this.prisma.lead.findMany({
+        where: {
+          assignedToId: userId,
+          status: { notIn: [LeadStatus.DELIVERED, LeadStatus.LOST] },
+          OR: [{ lastContactedAt: null }, { lastContactedAt: { lt: new Date(Date.now() - 48*3600*1000) } }],
+        },
+        include: { branch: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+    return { totalLeads, myLeads, testDrives, pendingFollowups };
+  }
+
   async pendingFollowups(user: { role: Role; branchId?: string | null }) {
     const cutoff = new Date(Date.now() - 48 * 3600 * 1000);
     const branchScope = HO_ROLES.includes(user.role) ? {} : { branchId: user.branchId || '__none__' };
@@ -78,7 +97,8 @@ class DashboardService {
 class DashboardController {
   constructor(private svc: DashboardService) {}
   @Get('overview') overview(@Req() req: any, @Query('range') range?: any) { return this.svc.overview(req.user, range); }
-  @Get('branch/:id/performance') perf(@Req() req: any, @Query('branchId') _x: string) { return this.svc.branchExecPerformance(req.user.branchId); }
+  @Get('branch/:id/performance') perf(@Req() req: any, @Param('id') id: string) { return this.svc.branchExecPerformance(id || req.user.branchId); }
+  @Get('exec-stats') execStats(@Req() req: any) { return this.svc.execStats(req.user.id); }
   @Get('followups') followups(@Req() req: any) { return this.svc.pendingFollowups(req.user); }
 }
 

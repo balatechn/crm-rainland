@@ -1,11 +1,14 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
-import { api, apiUrl, getToken } from '@/lib/api';
+import { api, apiUrl, getToken, getUser } from '@/lib/api';
 import { LEAD_STATUSES, STATUS_COLORS, inr } from '@/lib/utils';
-import { MessageCircle, Phone } from 'lucide-react';
+import { MessageCircle, Phone, Lock } from 'lucide-react';
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   const id = params.id;
+  const currentUser = getUser();
+  const isBM = currentUser?.role === 'BRANCH_MANAGER';
+
   const [lead, setLead] = useState<any>(null);
   const [activityNote, setActivityNote] = useState('');
   const [activityType, setActivityType] = useState('NOTE');
@@ -14,7 +17,13 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
   const [users, setUsers] = useState<any[]>([]);
 
   async function load() { setLead(await api(`/leads/${id}`)); }
-  useEffect(() => { load(); api<any[]>('/vehicles').then(setVehicles); api<any[]>('/users').then(setUsers); }, []); // eslint-disable-line
+  useEffect(() => {
+    load();
+    if (!isBM) {
+      api<any[]>('/vehicles').then(setVehicles);
+      api<any[]>('/users').then(setUsers);
+    }
+  }, []); // eslint-disable-line
 
   async function setStatus(status: string) {
     await api(`/leads/${id}/status`, { method:'PATCH', body: JSON.stringify({ status }) });
@@ -51,15 +60,19 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{lead.name}</h1>
-          <div className="text-sm text-gray-500">{lead.branch?.name} · {lead.source?.name}</div>
+          <div className="text-sm text-gray-500 flex items-center gap-2">
+            {lead.branch?.name} · {lead.source?.name}
+            {isBM && <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium"><Lock size={10}/> View only</span>}
+          </div>
         </div>
         <div className="flex gap-2">
-          <a className="btn btn-outline" href={`tel:${lead.mobile}`}><Phone size={14}/> Call</a>
-          <a className="btn btn-outline" target="_blank" href={wa}><MessageCircle size={14}/> WhatsApp</a>
+          <a className="btn btn-secondary" href={`tel:${lead.mobile}`}><Phone size={14}/> Call</a>
+          <a className="btn btn-secondary" target="_blank" href={wa}><MessageCircle size={14}/> WhatsApp</a>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
+        {/* Customer details — always visible */}
         <div className="card p-4 space-y-2">
           <h3 className="font-semibold">Customer</h3>
           <Field k="Mobile" v={lead.mobile}/>
@@ -70,35 +83,45 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
           <Field k="Notes" v={lead.notes || '-'}/>
         </div>
 
+        {/* Status & Assignment — read-only for BM, editable for others */}
         <div className="card p-4 space-y-3">
           <h3 className="font-semibold">Status</h3>
           <div><span className={`badge ${STATUS_COLORS[lead.status]}`}>{lead.status}</span></div>
-          <select className="select" value={lead.status} onChange={e=>setStatus(e.target.value)}>
-            {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          {!isBM && (
+            <select className="select" value={lead.status} onChange={e=>setStatus(e.target.value)}>
+              {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
           <h3 className="font-semibold pt-2">Assignment</h3>
-          <select className="select" value={lead.assignedTo?.id || ''} onChange={e=>assign(e.target.value)}>
-            <option value="">Unassigned</option>
-            {users.filter(u=>['SALES_EXECUTIVE','TEAM_LEADER','BRANCH_MANAGER'].includes(u.role)).map(u =>
-              <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-          </select>
+          <div className="text-sm text-gray-700">{lead.assignedTo?.name || 'Unassigned'}</div>
+          {!isBM && (
+            <select className="select" value={lead.assignedTo?.id || ''} onChange={e=>assign(e.target.value)}>
+              <option value="">Unassigned</option>
+              {users.filter(u=>['SALES_EXECUTIVE','TEAM_LEADER','BRANCH_MANAGER'].includes(u.role)).map(u =>
+                <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+          )}
         </div>
 
-        <div className="card p-4 space-y-3">
-          <h3 className="font-semibold">Quick Actions</h3>
-          <QuickQuotation leadId={lead.id} vehicles={vehicles} defaultVehicleId={lead.vehicle?.id} onCreated={load}/>
-          <QuickTestDrive leadId={lead.id} users={users} vehicles={vehicles} defaultVehicleId={lead.vehicle?.id} onCreated={load}/>
-        </div>
+        {/* Quick Actions — hidden for BM */}
+        {!isBM && (
+          <div className="card p-4 space-y-3">
+            <h3 className="font-semibold">Quick Actions</h3>
+            <QuickQuotation leadId={lead.id} vehicles={vehicles} defaultVehicleId={lead.vehicle?.id} onCreated={load}/>
+            <QuickTestDrive leadId={lead.id} users={users} vehicles={vehicles} defaultVehicleId={lead.vehicle?.id} onCreated={load}/>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
+        {/* Activities — BM can add NOTE/CALL, cannot VISIT */}
         <div className="card p-4">
-          <h3 className="font-semibold mb-2">Add Activity</h3>
+          <h3 className="font-semibold mb-2">Add Note / Activity</h3>
           <div className="flex gap-2 mb-2">
             <select className="select w-40" value={activityType} onChange={e=>setActivityType(e.target.value)}>
               <option value="NOTE">Note</option>
               <option value="CALL">Call</option>
-              <option value="VISIT">Visit (GPS)</option>
+              {!isBM && <option value="VISIT">Visit (GPS)</option>}
             </select>
             <input className="input" placeholder="Note" value={activityNote} onChange={e=>setActivityNote(e.target.value)}/>
             <button className="btn btn-primary" onClick={addActivity}>Add</button>
@@ -115,24 +138,27 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        <div className="card p-4">
-          <h3 className="font-semibold mb-2">WhatsApp</h3>
-          <div className="flex gap-2 mb-2">
-            <input className="input" placeholder="Message" value={waBody} onChange={e=>setWaBody(e.target.value)}/>
-            <button className="btn btn-primary" onClick={sendWa}>Send</button>
-          </div>
-          <div className="max-h-72 overflow-y-auto space-y-2">
-            {lead.whatsappLogs.map((m: any) => (
-              <div key={m.id} className={`text-sm p-2 rounded ${m.direction==='INBOUND'?'bg-gray-100':'bg-blue-50'}`}>
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{m.direction}</span><span>{new Date(m.createdAt).toLocaleString()}</span>
+        {/* WhatsApp — hidden for BM (only CALL_CENTER/ADMIN) */}
+        {!isBM && (
+          <div className="card p-4">
+            <h3 className="font-semibold mb-2">WhatsApp</h3>
+            <div className="flex gap-2 mb-2">
+              <input className="input" placeholder="Message" value={waBody} onChange={e=>setWaBody(e.target.value)}/>
+              <button className="btn btn-primary" onClick={sendWa}>Send</button>
+            </div>
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {lead.whatsappLogs.map((m: any) => (
+                <div key={m.id} className={`text-sm p-2 rounded ${m.direction==='INBOUND'?'bg-gray-100':'bg-blue-50'}`}>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{m.direction}</span><span>{new Date(m.createdAt).toLocaleString()}</span>
+                  </div>
+                  <div>{m.body}</div>
                 </div>
-                <div>{m.body}</div>
-              </div>
-            ))}
-            {lead.whatsappLogs.length===0 && <div className="text-sm text-gray-500">No messages</div>}
+              ))}
+              {lead.whatsappLogs.length===0 && <div className="text-sm text-gray-500">No messages</div>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
