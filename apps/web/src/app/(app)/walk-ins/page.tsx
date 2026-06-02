@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api, getUser } from '@/lib/api';
+import { api } from '@/lib/api';
 import { Store, Plus, X } from 'lucide-react';
 
 const EMPTY = {
@@ -10,7 +10,6 @@ const EMPTY = {
 };
 
 export default function WalkInsPage() {
-  const me = getUser();
   const [items,    setItems]    = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);

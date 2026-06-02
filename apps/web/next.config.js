@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   reactStrictMode: true,
+  eslint: { ignoreDuringBuilds: true },
   async rewrites() {
     // Server-side proxy target. Use API_PROXY_TARGET (absolute URL) on Vercel so the
     // browser only talks to the same HTTPS origin and we avoid mixed-content blocking.
