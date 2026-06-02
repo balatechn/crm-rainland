@@ -21,11 +21,13 @@ import { FinanceModule } from './finance/finance.module';
 import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { WalkInsModule } from './walk-ins/walk-ins.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    MailModule,
     AuthModule,
     UsersModule,
     BranchesModule,
