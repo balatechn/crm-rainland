@@ -8,7 +8,7 @@ import {
   LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
   Bell, Search, UserCircle, Landmark, Store, BellRing,
 } from 'lucide-react';
-import { getToken, getUser, setToken, setUser } from '@/lib/api';
+import { getToken, getUser, setToken, setUser, api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type NavItem = { href: string; label: string; icon?: any; roles?: string[] };
