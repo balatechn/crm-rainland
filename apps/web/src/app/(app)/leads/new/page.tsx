@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 export default function NewLeadPage() {
   const router = useRouter();
   const [form, setForm] = useState<any>({ name:'', mobile:'', alternateMobile:'', email:'', city:'', pincode:'', notes:'', sourceId:'', branchId:'', vehicleId:'' });
+  const [followupAt, setFollowupAt] = useState('');
+  const [followupType, setFollowupType] = useState('CALL');
   const [sources, setSources] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
@@ -24,6 +26,9 @@ export default function NewLeadPage() {
     e.preventDefault(); setBusy(true); setErr(null);
     try {
       const created = await api<any>('/leads', { method:'POST', body: JSON.stringify(form) });
+      if (followupAt) {
+        await api('/follow-ups', { method:'POST', body: JSON.stringify({ leadId: created.id, type: followupType, scheduledAt: followupAt }) });
+      }
       router.push(`/leads/${created.id}`);
     } catch (e: any) { setErr(e.message); }
     finally { setBusy(false); }
@@ -66,6 +71,23 @@ export default function NewLeadPage() {
             <option value="">None</option>
             {vehicles.map(v => <option key={v.id} value={v.id}>{v.brand} {v.model}{v.variant?` (${v.variant})`:''}</option>)}
           </select>
+        </div>
+        <div className="md:col-span-2 border-t pt-3 mt-1">
+          <p className="text-sm font-medium text-gray-700 mb-2">Follow-up Schedule <span className="text-gray-400 font-normal">(optional)</span></p>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm">Date &amp; Time</label>
+              <input className="input mt-1" type="datetime-local" value={followupAt} onChange={e => setFollowupAt(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm">Type</label>
+              <select className="select mt-1" value={followupType} onChange={e => setFollowupType(e.target.value)}>
+                <option value="CALL">Call</option>
+                <option value="VISIT">Visit</option>
+                <option value="MESSAGE">Message</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div className="md:col-span-2"><label className="text-sm">Notes</label><textarea className="textarea mt-1" rows={3} value={form.notes} onChange={e=>set('notes', e.target.value)} /></div>
         {err && <div className="md:col-span-2 text-sm text-red-600">{err}</div>}
