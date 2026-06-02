@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/jwt.guard';
 import { WhatsappService } from './whatsapp.service';
 
@@ -6,9 +6,25 @@ import { WhatsappService } from './whatsapp.service';
 export class WhatsappController {
   constructor(private svc: WhatsappService) {}
 
-  // Public webhook (verify signature in production)
+  // Public webhook (Evolution API posts here)
   @Post('webhook')
   webhook(@Body() body: any) { return this.svc.inbound(body); }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('status')
+  status() { return this.svc.getStatus(); }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('qr')
+  qr() { return this.svc.getQR(); }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Delete('disconnect')
+  disconnect() { return this.svc.disconnect(); }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('conversations')
+  conversations() { return this.svc.conversations(); }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Get('messages')
