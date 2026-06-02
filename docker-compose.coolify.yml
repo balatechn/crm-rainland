@@ -44,6 +44,11 @@ services:
       WHATSAPP_API_URL: http://evolution-api:8080
       WHATSAPP_API_TOKEN: ${EVOLUTION_API_KEY}
       WHATSAPP_PHONE_ID: ${WHATSAPP_INSTANCE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
     expose:
       - "4000"
     # Coolify will expose this with a public URL via its proxy.
