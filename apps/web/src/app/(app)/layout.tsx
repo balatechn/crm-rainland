@@ -6,8 +6,343 @@ import {
   LayoutDashboard, Users, Phone, FileText, Car, Building2,
   CalendarCheck, ClipboardList, Truck, MessageCircle, BarChart3,
   LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
-  BellRing, Landmark, UserCircle,
+  Bell, Search, UserCircle, Landmark, MapPin, Handshake,
+  Store, BellRing, MessagesSquare,
 } from 'lucide-react';
+import { getToken, getUser, setToken, setUser } from '@/lib/api';
+import { cn } from '@/lib/utils';
+
+type NavItem = { href: string; label: string; icon?: any; roles?: string[] };
+
+const LOGO = 'https://rainlandautocorp.com/logo.png';
+
+// Grouped nav
+const SALES_ITEMS: NavItem[] = [
+  { href: '/leads',       label: 'Leads',       icon: Users },
+  { href: '/walk-ins',    label: 'Walk-Ins',     icon: Store },
+  { href: '/follow-ups',  label: 'Follow-Ups',   icon: BellRing },
+  { href: '/test-drives', label: 'Test Drives',  icon: CalendarCheck },
+  { href: '/pipeline',    label: 'Pipeline',     icon: ClipboardList },
+  { href: '/deals',       label: 'Deals',        icon: Handshake },
+  { href: '/lead-map',    label: 'Lead Map',     icon: MapPin },
+];
+
+const OPERATIONS_ITEMS: NavItem[] = [
+  { href: '/quotations',  label: 'Quotations',   icon: FileText },
+  { href: '/bookings',    label: 'Bookings',     icon: Tag },
+  { href: '/finance',     label: 'Finance',      icon: Landmark },
+  { href: '/deliveries',  label: 'Deliveries',   icon: Truck },
+];
+
+const INTELLIGENCE_ITEMS: NavItem[] = [
+  { href: '/reports',     label: 'Reports',      icon: BarChart3 },
+  { href: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
+];
+
+const ADMIN_ITEMS: NavItem[] = [
+  { href: '/masters/branches', label: 'Branches',     icon: Building2,  roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
+  { href: '/masters/vehicles', label: 'Vehicles',     icon: Car,        roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
+  { href: '/masters/sources',  label: 'Lead Sources', icon: Phone,      roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
+  { href: '/users',            label: 'Users',        icon: ShieldCheck, roles: ['ADMIN','CRM_MANAGER'] },
+  { href: '/audit',            label: 'Audit Logs',   icon: History,    roles: ['ADMIN','CRM_MANAGER'] },
+];
+
+function DropdownMenu({
+  label, items, pathname, user, onNav,
+}: { label: string; items: NavItem[]; pathname: string | null; user: any; onNav?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const filtered = items.filter(n => !n.roles || (user && n.roles.includes(user.role)));
+  const isActive = filtered.some(n => pathname?.startsWith(n.href));
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={cn(
+          'flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
+          isActive
+            ? 'bg-white/15 text-white'
+            : 'text-slate-300 hover:text-white hover:bg-white/10'
+        )}
+      >
+        {label}
+        <ChevronDown size={13} className={cn('transition-transform duration-150', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 mt-1.5 min-w-[200px] bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 z-50">
+          {filtered.map(item => {
+            const Icon = item.icon;
+            const active = pathname?.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => { setOpen(false); onNav?.(); }}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                  active
+                    ? 'text-navy font-semibold bg-slate-50'
+                    : 'text-gray-700 hover:bg-gray-50'
+                )}
+              >
+                {Icon && <Icon size={15} className={active ? 'text-navy' : 'text-gray-400'} />}
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setU] = useState<any>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!getToken()) { router.replace('/login'); return; }
+    setU(getUser());
+  }, [router]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  function logout() { setToken(null); setUser(null); router.replace('/login'); }
+
+  const isDashboard = pathname === '/dashboard';
+  const isWhatsApp  = pathname?.startsWith('/whatsapp');
+
+  const ROLE_SHORT: Record<string, string> = {
+    ADMIN: 'Admin', CRM_MANAGER: 'CRM Mgr', CALL_CENTER: 'Call Ctr',
+    SALES_HEAD: 'Sales Head', BRANCH_MANAGER: 'Br. Mgr',
+    SALES_EXECUTIVE: 'Exec', TEAM_LEADER: 'TL',
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      {/* ── Top bar ── */}
+      <header className="sticky top-0 z-30 bg-[#0f1f3d] border-b border-white/10">
+        <div className="max-w-screen-2xl mx-auto px-4 lg:px-6 h-14 flex items-center gap-1">
+
+          {/* Logo */}
+          <Link href="/dashboard" className="flex items-center gap-2 shrink-0 mr-2">
+            <span className="text-[22px] font-extrabold text-red-500 tracking-tight leading-none">RAINLAND</span>
+            <span className="text-[11px] font-bold bg-white/15 text-white px-2 py-0.5 rounded-md tracking-widest">CRM</span>
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden lg:flex items-center gap-0.5 flex-1">
+            {/* Dashboard */}
+            <Link
+              href="/dashboard"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
+                isDashboard ? 'bg-white/20 text-white' : 'text-slate-300 hover:text-white hover:bg-white/10'
+              )}
+            >
+              <LayoutDashboard size={14} />
+              Dashboard
+            </Link>
+
+            {/* WhatsApp */}
+            <Link
+              href="/whatsapp"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
+                isWhatsApp ? 'bg-white/20 text-white' : 'text-slate-300 hover:text-white hover:bg-white/10'
+              )}
+            >
+              <MessageCircle size={14} />
+              WhatsApp
+            </Link>
+
+            {/* Team Chat (placeholder) */}
+            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap text-slate-300 hover:text-white hover:bg-white/10 transition-colors">
+              <MessagesSquare size={14} />
+              Team Chat
+            </button>
+
+            {/* Dropdowns */}
+            <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
+            <DropdownMenu label="Operations"   items={OPERATIONS_ITEMS}   pathname={pathname} user={user} />
+            <DropdownMenu label="Intelligence" items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
+            <DropdownMenu label="Admin"        items={ADMIN_ITEMS}        pathname={pathname} user={user} />
+          </nav>
+
+          <div className="flex-1 lg:hidden" />
+
+          {/* Right icons */}
+          <div className="flex items-center gap-1">
+            {/* Search */}
+            <button
+              onClick={() => setSearchOpen(v => !v)}
+              className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="Search"
+            >
+              <Search size={18} />
+            </button>
+
+            {/* Bell */}
+            <button className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors relative" aria-label="Notifications">
+              <Bell size={18} />
+            </button>
+
+            {/* Profile */}
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen(v => !v)}
+                className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-md hover:bg-white/10 transition-colors ml-1"
+              >
+                <div className="h-8 w-8 rounded-full bg-slate-500 text-white flex items-center justify-center text-sm font-bold shrink-0">
+                  {(user?.name || '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="hidden md:block text-left leading-tight">
+                  <div className="text-sm font-semibold text-white leading-none">
+                    {(user?.name || '').split(' ')[0]}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {ROLE_SHORT[user?.role] ?? user?.role ?? ''}
+                  </div>
+                </div>
+                <ChevronDown size={13} className="hidden md:block text-slate-400" />
+              </button>
+
+              {profileOpen && (
+                <div className="absolute right-0 mt-1.5 w-56 bg-white border border-gray-100 rounded-xl shadow-xl py-1.5 z-50">
+                  <div className="px-4 py-2.5 border-b border-gray-100">
+                    <div className="text-sm font-semibold text-gray-900">{user?.name}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{user?.email}</div>
+                  </div>
+                  <Link href="/profile" onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    <UserCircle size={15} className="text-gray-400" /> My Profile
+                  </Link>
+                  <button onClick={logout}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                    <LogOut size={15} /> Logout
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="lg:hidden p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors ml-1"
+              aria-label="Open menu"
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Inline search bar */}
+        {searchOpen && (
+          <div className="border-t border-white/10 px-4 lg:px-6 py-2.5 bg-[#0f1f3d]">
+            <input
+              autoFocus
+              placeholder="Search leads, bookings, customers…"
+              onBlur={() => setSearchOpen(false)}
+              onKeyDown={e => e.key === 'Escape' && setSearchOpen(false)}
+              className="w-full max-w-xl bg-white/10 text-white placeholder:text-slate-400 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-white/20"
+            />
+          </div>
+        )}
+      </header>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileOpen(false)}>
+          <div className="absolute right-0 top-0 bottom-0 w-72 bg-white flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <span className="text-lg font-extrabold text-red-500 tracking-tight">RAINLAND</span>
+              <button onClick={() => setMobileOpen(false)} className="p-1 rounded hover:bg-gray-100"><X size={18} /></button>
+            </div>
+            <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+              {/* Direct links */}
+              {[
+                { href: '/dashboard',  label: 'Dashboard',  Icon: LayoutDashboard },
+                { href: '/whatsapp',   label: 'WhatsApp',   Icon: MessageCircle },
+              ].map(({ href, label, Icon }) => (
+                <Link key={href} href={href}
+                  className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium',
+                    pathname?.startsWith(href) ? 'bg-[#0f1f3d] text-white' : 'text-gray-700 hover:bg-gray-100')}>
+                  <Icon size={16} /> {label}
+                </Link>
+              ))}
+
+              {/* Groups */}
+              {[
+                { label: 'Sales',        items: SALES_ITEMS },
+                { label: 'Operations',   items: OPERATIONS_ITEMS },
+                { label: 'Intelligence', items: INTELLIGENCE_ITEMS },
+                { label: 'Admin',        items: ADMIN_ITEMS },
+              ].map(({ label, items }) => {
+                const filtered = items.filter(n => !n.roles || (user && n.roles.includes(user.role)));
+                if (!filtered.length) return null;
+                return (
+                  <div key={label}>
+                    <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest font-semibold text-gray-400">{label}</div>
+                    {filtered.map(item => {
+                      const Icon = item.icon;
+                      const active = pathname?.startsWith(item.href);
+                      return (
+                        <Link key={item.href} href={item.href}
+                          className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm',
+                            active ? 'bg-[#0f1f3d] text-white font-medium' : 'text-gray-700 hover:bg-gray-100')}>
+                          {Icon && <Icon size={15} />} {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </nav>
+            <div className="p-3 border-t space-y-1">
+              <Link href="/profile" onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-gray-100">
+                <UserCircle size={15} /> My Profile
+              </Link>
+              <button onClick={logout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-600 hover:bg-red-50">
+                <LogOut size={15} /> Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main className="flex-1 min-w-0">
+        <div className="p-4 md:p-6 max-w-screen-2xl mx-auto">{children}</div>
+      </main>
+    </div>
+  );
+}
+
 import { getToken, getUser, setToken, setUser } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
