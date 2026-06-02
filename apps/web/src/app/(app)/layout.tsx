@@ -62,7 +62,7 @@ function DropdownMenu({ label, items, pathname, user, onNav }: {
         className={cn(
           'flex items-center gap-1 px-3.5 h-[70px] text-[13px] font-medium whitespace-nowrap transition-all duration-150 border-b-2',
           isActive
-            ? 'text-white border-brand'
+            ? 'text-white border-[#2563EB]'
             : 'text-slate-400 border-transparent hover:text-white hover:border-white/30'
         )}
       >
@@ -143,7 +143,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Link href={href}
         className={cn(
           'flex items-center gap-2 px-3.5 h-[70px] text-[13px] font-medium whitespace-nowrap transition-all duration-150 border-b-2',
-          active ? 'text-white border-brand' : 'text-slate-400 border-transparent hover:text-white hover:border-white/30'
+          active ? 'text-white border-[#2563EB]' : 'text-slate-400 border-transparent hover:text-white hover:border-white/30'
         )}
       >
         <Icon size={15} />
@@ -161,11 +161,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 mr-3">
-            <div className="flex flex-col leading-none">
-              <span className="text-[20px] font-extrabold text-[#E53935] tracking-tight">RAINLAND</span>
-              <span className="text-[9px] font-bold text-slate-400 tracking-[0.2em] uppercase">Auto Corp</span>
-            </div>
-            <span className="hidden sm:inline text-[10px] font-bold bg-brand/20 text-brand px-2 py-0.5 rounded-md tracking-widest">CRM</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="https://rainlandautocorp.com/logo.png" alt="Rainland Auto Corp" className="h-9 w-auto object-contain" />
+            <span className="hidden sm:inline text-[10px] font-bold bg-[#2563EB33] text-[#3B82F6] px-2 py-0.5 rounded-md tracking-widest">CRM</span>
           </Link>
 
           {/* Vertical divider */}
