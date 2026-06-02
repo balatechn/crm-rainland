@@ -41,7 +41,14 @@ export default function NewLeadPage() {
         <div><label className="text-sm">Pincode</label><input className="input mt-1" value={form.pincode} onChange={e=>set('pincode', e.target.value)} /></div>
         <div>
           <label className="text-sm">Source *</label>
-          <select className="select mt-1" required value={form.sourceId} onChange={e=>set('sourceId', e.target.value)}>
+          <select className="select mt-1" required value={form.sourceId} onChange={e => {
+            const selected = sources.find(s => s.id === e.target.value);
+            if (selected?.name?.toLowerCase().includes('walk')) {
+              router.push('/walk-ins');
+            } else {
+              set('sourceId', e.target.value);
+            }
+          }}>
             <option value="">Select</option>
             {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
