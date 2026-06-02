@@ -26,32 +26,43 @@ function fmt(dt: string) {
 
 // ─── QR Modal ─────────────────────────────────────────────────────────────────
 function QRModal({ onClose }: { onClose: () => void }) {
-  const [qr, setQR]         = useState<string | null>(null);
-  const [error, setError]   = useState('');
+  const [qr, setQR]           = useState<string | null>(null);
+  const [error, setError]     = useState('');
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<any>(null);
 
   const fetchQR = useCallback(async () => {
     setLoading(true); setError('');
     try {
       const data = await api<any>('/whatsapp/qr');
-      if (data?.error) { setError(data.error); setQR(null); }
-      else if (data?.qr) { setQR(data.qr); }
-      else { setError('Could not load QR code. Is Evolution API running?'); }
-    } catch {
-      setError('Could not load QR code. Is Evolution API running?');
+      if (data?.connected) {
+        // Already connected — close modal
+        onClose();
+        return;
+      }
+      if (data?.error) {
+        setError(data.error);
+        setQR(null);
+      } else if (data?.qr) {
+        // Ensure it's a valid data URI (base64 image)
+        const src = data.qr.startsWith('data:') ? data.qr : `data:image/png;base64,${data.qr}`;
+        setQR(src);
+      } else {
+        setError('No QR code received. Is Evolution API running and the backend redeployed?');
+      }
+    } catch (e: any) {
+      setError(`Request failed: ${e?.message || 'Unknown error'}`);
     } finally { setLoading(false); }
-  }, []);
+  }, [onClose]);
 
   // Poll status every 3s — close modal once connected
   useEffect(() => {
     fetchQR();
-    intervalRef.current = setInterval(async () => {
+    const iv = setInterval(async () => {
       const s = await api<any>('/whatsapp/status').catch(() => null);
-      if (s?.state === 'open') { clearInterval(intervalRef.current); onClose(); }
+      if (s?.state === 'open') { clearInterval(iv); onClose(); }
     }, 3000);
-    return () => clearInterval(intervalRef.current);
-  }, [fetchQR, onClose]);
+    return () => clearInterval(iv);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

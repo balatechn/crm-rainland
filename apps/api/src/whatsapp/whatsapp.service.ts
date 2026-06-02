@@ -35,19 +35,44 @@ export class WhatsappService {
 
   async getQR() {
     try {
-      // First ensure the instance exists – try to create it (idempotent)
-      await this.evoFetch(`/instance/create`, {
+      if (!this.apiUrl) return { error: 'WhatsApp API not configured (WHATSAPP_API_URL missing)' };
+
+      // Try to create instance – ignore 400/409 (already exists)
+      const createRes = await this.evoFetch(`/instance/create`, {
         method: 'POST',
         body: JSON.stringify({ instanceName: this.instance, integration: 'WHATSAPP-BAILEYS' }),
       });
-      const r = await this.evoFetch(`/instance/connect/${this.instance}`);
-      if (!r.ok) {
-        const txt = await r.text();
-        return { error: `Evolution API error: ${txt}` };
+      // If 422 / 500 it may mean genuinely broken – log but continue
+      if (!createRes.ok && createRes.status !== 400 && createRes.status !== 409) {
+        this.logger.warn(`Instance create returned ${createRes.status}`);
       }
-      const data = await r.json();
-      // v2 returns { base64: "data:image/png;base64,..." } or { code: "..." }
-      return { qr: data?.base64 || data?.qrcode?.base64 || data?.code || null };
+
+      const r = await this.evoFetch(`/instance/connect/${this.instance}`);
+      const txt = await r.text();
+      this.logger.log(`Evolution /connect response ${r.status}: ${txt.substring(0, 300)}`);
+
+      if (!r.ok) return { error: `Evolution API error (${r.status}): ${txt}` };
+
+      let data: any = {};
+      try { data = JSON.parse(txt); } catch { return { error: `Bad JSON from Evolution API: ${txt}` }; }
+
+      // v2 possible shapes:
+      // { base64: "data:image/png;base64,..." }
+      // { qrcode: { base64: "..." } }
+      // { code: "2@xxx..." }        ← raw QR string, wrap as data URI via frontend
+      const qr =
+        data?.base64 ||
+        data?.qrcode?.base64 ||
+        (data?.code ? `data:image/png;base64,${data.code}` : null);
+
+      if (!qr) {
+        // If already connected, Evolution returns { instance: { state: "open" } }
+        if (data?.instance?.state === 'open' || data?.state === 'open') {
+          return { connected: true };
+        }
+        return { error: `Unexpected response: ${txt.substring(0, 200)}` };
+      }
+      return { qr };
     } catch (e: any) {
       return { error: e.message };
     }
