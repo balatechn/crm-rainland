@@ -3,20 +3,7 @@ import { LeadStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { LeadAssignmentService } from './lead-assignment.service';
 import { branchScopeWhere } from '../common/scope';
-
-export interface CreateLeadDto {
-  name: string;
-  mobile: string;
-  alternateMobile?: string;
-  email?: string;
-  city?: string;
-  pincode?: string;
-  notes?: string;
-  sourceName?: string;   // e.g. "WhatsApp"
-  sourceId?: string;
-  branchId?: string;
-  vehicleId?: string;
-}
+import { CreateLeadDto, UpdateLeadDto } from './dto';
 
 @Injectable()
 export class LeadsService {
@@ -96,7 +83,7 @@ export class LeadsService {
     });
   }
 
-  async update(id: string, dto: any) {
+  async update(id: string, dto: UpdateLeadDto) {
     return this.prisma.lead.update({ where: { id }, data: dto });
   }
 

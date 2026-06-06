@@ -44,7 +44,8 @@ export class AuthService {
 
   async changePassword(userId: string, oldPassword: string, newPassword: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const ok = await bcrypt.compare(oldPassword, user!.passwordHash);
+    if (!user) throw new BadRequestException('User not found');
+    const ok = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!ok) throw new BadRequestException('Current password is incorrect');
     if (newPassword.length < 6) throw new BadRequestException('New password must be at least 6 characters');
     const hash = await bcrypt.hash(newPassword, 10);
