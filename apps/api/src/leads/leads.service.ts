@@ -2,12 +2,19 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { LeadStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { LeadAssignmentService } from './lead-assignment.service';
+import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.module';
 import { branchScopeWhere } from '../common/scope';
 import { CreateLeadDto, UpdateLeadDto } from './dto';
 
 @Injectable()
 export class LeadsService {
-  constructor(private prisma: PrismaService, private assigner: LeadAssignmentService) {}
+  constructor(
+    private prisma: PrismaService,
+    private assigner: LeadAssignmentService,
+    private audit: AuditService,
+    private notifs: NotificationsService,
+  ) {}
 
   async list(user: { role: Role; branchId?: string | null }, q: { status?: string; search?: string; branchId?: string }) {
     const where: any = { ...branchScopeWhere(user) };
@@ -74,13 +81,18 @@ export class LeadsService {
 
     const assignedToId = await this.assigner.pickExecutive(branchId);
 
-    return this.prisma.lead.create({
+    const lead = await this.prisma.lead.create({
       data: {
         name: dto.name, mobile: dto.mobile, alternateMobile: dto.alternateMobile, email: dto.email, city: dto.city, pincode: dto.pincode,
         notes: dto.notes, sourceId, branchId, vehicleId: dto.vehicleId, assignedToId,
       },
       include: { source:true, branch:true, vehicle:true, assignedTo:{ select:{ id:true,name:true } } },
     });
+    this.audit.log(assignedToId, 'CREATE', 'Lead', lead.id, { name: lead.name, mobile: lead.mobile });
+    if (assignedToId) {
+      this.notifs.create(assignedToId, 'New lead assigned', `${lead.name} (${lead.mobile}) has been assigned to you`, 'LEAD', lead.id);
+    }
+    return lead;
   }
 
   async update(id: string, dto: UpdateLeadDto) {
@@ -92,11 +104,18 @@ export class LeadsService {
     await this.prisma.activity.create({
       data: { leadId: id, userId, type: 'STATUS_CHANGE', note: note || `Status changed to ${status}` },
     });
+    this.audit.log(userId, 'STATUS_CHANGE', 'Lead', id, { status });
     return updated;
   }
 
   async assign(id: string, executiveId: string) {
-    return this.prisma.lead.update({ where: { id }, data: { assignedToId: executiveId } });
+    const lead = await this.prisma.lead.findUnique({ where: { id }, select: { name: true, mobile: true } });
+    const updated = await this.prisma.lead.update({ where: { id }, data: { assignedToId: executiveId } });
+    this.audit.log(executiveId, 'ASSIGN', 'Lead', id, { executiveId });
+    if (lead) {
+      this.notifs.create(executiveId, 'Lead assigned to you', `${lead.name} (${lead.mobile}) has been assigned to you`, 'LEAD', id);
+    }
+    return updated;
   }
 
   async addActivity(id: string, userId: string, body: { type: string; note?: string; gpsLat?: number; gpsLng?: number }) {

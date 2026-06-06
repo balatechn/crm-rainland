@@ -3,11 +3,12 @@ import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { MailService } from '../mail/mail.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateUserDto, UpdateUserDto } from './dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService, private mail: MailService) {}
+  constructor(private prisma: PrismaService, private mail: MailService, private audit: AuditService) {}
 
   list(branchId?: string) {
     return this.prisma.user.findMany({
@@ -24,11 +25,14 @@ export class UsersService {
       select: { id:true,name:true,email:true,role:true,branchId:true },
     });
     this.mail.sendWelcome(data.email, data.name, data.password);
+    this.audit.log(user.id, 'CREATE', 'User', user.id, { email: user.email, role: user.role });
     return user;
   }
 
-  update(id: string, data: UpdateUserDto) {
-    return this.prisma.user.update({ where: { id }, data: { ...data, role: data.role as Role | undefined } });
+  async update(id: string, data: UpdateUserDto) {
+    const updated = await this.prisma.user.update({ where: { id }, data: { ...data, role: data.role as Role | undefined } });
+    this.audit.log(id, 'UPDATE', 'User', id, data as any);
+    return updated;
   }
 
   loginHistory(userId: string) {

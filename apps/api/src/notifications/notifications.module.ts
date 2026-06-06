@@ -1,11 +1,11 @@
 import {
-  Module, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, Injectable,
+  Module, Body, Controller, Get, Param, Patch, Req, UseGuards, Injectable,
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard } from '../auth/jwt.guard';
 import { PrismaService } from '../prisma/prisma.module';
 
 @Injectable()
-class NotificationsService {
+export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
   list(userId: string, unreadOnly = false) {
@@ -16,8 +16,9 @@ class NotificationsService {
     });
   }
 
-  unreadCount(userId: string) {
-    return this.prisma.notification.count({ where: { userId, read: false } });
+  async unreadCount(userId: string) {
+    const count = await this.prisma.notification.count({ where: { userId, read: false } });
+    return { count };
   }
 
   markRead(id: string, userId: string) {
@@ -29,7 +30,7 @@ class NotificationsService {
   }
 
   create(userId: string, title: string, body: string, type: string, entityId?: string) {
-    return this.prisma.notification.create({ data: { userId, title, body, type, entityId } });
+    return this.prisma.notification.create({ data: { userId, title, body, type, entityId } }).catch(() => {});
   }
 }
 
@@ -38,11 +39,15 @@ class NotificationsService {
 class NotificationsController {
   constructor(private svc: NotificationsService) {}
 
-  @Get()          list(@Req() req: any, @Query('unread') u: string) { return this.svc.list(req.user.id, u === 'true'); }
-  @Get('count')   count(@Req() req: any)                           { return this.svc.unreadCount(req.user.id); }
-  @Patch(':id/read') read(@Param('id') id: string, @Req() req: any) { return this.svc.markRead(id, req.user.id); }
-  @Patch('mark-all-read') readAll(@Req() req: any)                 { return this.svc.markAllRead(req.user.id); }
+  @Get()              list(@Req() req: any)                           { return this.svc.list(req.user.id); }
+  @Get('count')       count(@Req() req: any)                          { return this.svc.unreadCount(req.user.id); }
+  @Patch(':id/read')  read(@Param('id') id: string, @Req() req: any)  { return this.svc.markRead(id, req.user.id); }
+  @Patch('mark-all-read') readAll(@Req() req: any)                    { return this.svc.markAllRead(req.user.id); }
 }
 
-@Module({ controllers: [NotificationsController], providers: [NotificationsService], exports: [NotificationsService] })
+@Module({
+  controllers: [NotificationsController],
+  providers: [NotificationsService],
+  exports: [NotificationsService],
+})
 export class NotificationsModule {}

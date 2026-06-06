@@ -104,8 +104,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [onlineOpen,  setOnlineOpen] = useState(false);
   const [onlineUsers, setOnlineUsers]= useState<any[]>([]);
   const [searchVal,   setSearchVal]  = useState('');
+  const [notifOpen,   setNotifOpen]  = useState(false);
+  const [notifs,      setNotifs]     = useState<any[]>([]);
+  const [unreadCount, setUnreadCount]= useState(0);
   const profileRef = useRef<HTMLDivElement>(null);
   const onlineRef  = useRef<HTMLDivElement>(null);
+  const notifRef   = useRef<HTMLDivElement>(null);
   const searchRef  = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,10 +121,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const h = (e: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
       if (onlineRef.current  && !onlineRef.current.contains(e.target as Node))  setOnlineOpen(false);
+      if (notifRef.current   && !notifRef.current.contains(e.target as Node))   setNotifOpen(false);
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  // Poll unread count every 30 s
+  useEffect(() => {
+    if (!getToken()) return;
+    const fetchCount = () => api<{ count?: number }>('/notifications/count').then(r => setUnreadCount(r?.count ?? (r as any) ?? 0)).catch(() => {});
+    fetchCount();
+    const iv = setInterval(fetchCount, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  async function openNotifs() {
+    if (!notifOpen) {
+      const data = await api<any[]>('/notifications').catch(() => []);
+      setNotifs(data || []);
+    }
+    setNotifOpen(v => !v);
+  }
+
+  async function markRead(id: string) {
+    await api(`/notifications/${id}/read`, { method: 'PATCH' }).catch(() => {});
+    setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
+    setUnreadCount(c => Math.max(0, c - 1));
+  }
+
+  async function markAllRead() {
+    await api('/notifications/mark-all-read', { method: 'PATCH' }).catch(() => {});
+    setNotifs(ns => ns.map(n => ({ ...n, read: true })));
+    setUnreadCount(0);
+  }
 
   function openOnlineUsers() {
     if (!onlineOpen) api<any[]>('/users').then(l => setOnlineUsers((l||[]).filter((u: any) => u.active)));
@@ -243,9 +277,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Notifications */}
-            <button className="relative p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/8 transition-all duration-150" aria-label="Notifications">
-              <Bell size={17} />
-            </button>
+            <div className="relative" ref={notifRef}>
+              <button onClick={openNotifs}
+                className="relative p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/8 transition-all duration-150"
+                aria-label="Notifications">
+                <Bell size={17} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center leading-none">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-[#E2E8F0] rounded-2xl shadow-modal z-50 animate-fade-in overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#F1F5F9] flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-[#64748B] uppercase tracking-wider">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button onClick={markAllRead} className="text-[11px] text-brand hover:underline">Mark all read</button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto divide-y divide-[#F1F5F9]">
+                    {notifs.length === 0 && (
+                      <p className="px-4 py-5 text-sm text-[#94A3B8] text-center">No notifications</p>
+                    )}
+                    {notifs.map(n => (
+                      <button key={n.id} onClick={() => markRead(n.id)}
+                        className={cn('w-full text-left px-4 py-3 hover:bg-[#F8FAFC] transition-colors flex gap-3 items-start',
+                          !n.read && 'bg-blue-50/50')}>
+                        <span className={cn('mt-1 h-2 w-2 rounded-full flex-shrink-0', n.read ? 'bg-transparent' : 'bg-brand')} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-navy truncate">{n.title}</div>
+                          <div className="text-[11px] text-[#64748B] mt-0.5 line-clamp-2">{n.body}</div>
+                          <div className="text-[10px] text-[#94A3B8] mt-1">
+                            {new Date(n.createdAt).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Divider */}
             <div className="h-6 w-px bg-white/10 mx-1" />

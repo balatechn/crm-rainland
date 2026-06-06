@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 
@@ -6,6 +7,7 @@ import { JwtAuthGuard } from './jwt.guard';
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post('login')
   login(@Body() body: { email: string; password: string }, @Req() req: any) {
     return this.auth.login(body.email, body.password, req.ip, req.headers['user-agent']);
