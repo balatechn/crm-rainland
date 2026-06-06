@@ -37,45 +37,67 @@ export class WhatsappService {
     try {
       if (!this.apiUrl) return { error: 'WhatsApp API not configured (WHATSAPP_API_URL missing)' };
 
-      // Try to create instance – ignore 400/409 (already exists)
-      const createRes = await this.evoFetch(`/instance/create`, {
-        method: 'POST',
-        body: JSON.stringify({ instanceName: this.instance, integration: 'WHATSAPP-BAILEYS' }),
-      });
-      // If 422 / 500 it may mean genuinely broken – log but continue
-      if (!createRes.ok && createRes.status !== 400 && createRes.status !== 409) {
-        this.logger.warn(`Instance create returned ${createRes.status}`);
-      }
+      // Ensure the instance exists — create it (ignore 400/409 = already exists)
+      await this.ensureInstance();
 
-      const r = await this.evoFetch(`/instance/connect/${this.instance}`);
-      const txt = await r.text();
-      this.logger.log(`Evolution /connect response ${r.status}: ${txt.substring(0, 300)}`);
+      const result = await this.connectAndExtractQR();
+      if (result) return result;
 
-      if (!r.ok) return { error: `Evolution API error (${r.status}): ${txt}` };
+      // {"count":0} or no QR means the instance exists in our code but not in Evolution DB.
+      // Force-delete and recreate the instance, then retry once.
+      this.logger.warn('No QR from connect — deleting stale instance and recreating');
+      await this.evoFetch(`/instance/delete/${this.instance}`, { method: 'DELETE' }).catch(() => {});
+      await this.ensureInstance();
 
-      let data: any = {};
-      try { data = JSON.parse(txt); } catch { return { error: `Bad JSON from Evolution API: ${txt}` }; }
-
-      // v2 possible shapes:
-      // { base64: "data:image/png;base64,..." }
-      // { qrcode: { base64: "..." } }
-      // { code: "2@xxx..." }        ← raw QR string, wrap as data URI via frontend
-      const qr =
-        data?.base64 ||
-        data?.qrcode?.base64 ||
-        (data?.code ? `data:image/png;base64,${data.code}` : null);
-
-      if (!qr) {
-        // If already connected, Evolution returns { instance: { state: "open" } }
-        if (data?.instance?.state === 'open' || data?.state === 'open') {
-          return { connected: true };
-        }
-        return { error: `Unexpected response: ${txt.substring(0, 200)}` };
-      }
-      return { qr };
+      return await this.connectAndExtractQR() ?? { error: 'Evolution API returned no QR after instance recreate. Check API logs.' };
     } catch (e: any) {
       return { error: e.message };
     }
+  }
+
+  private async ensureInstance() {
+    const createRes = await this.evoFetch(`/instance/create`, {
+      method: 'POST',
+      body: JSON.stringify({ instanceName: this.instance, integration: 'WHATSAPP-BAILEYS' }),
+    });
+    if (!createRes.ok && createRes.status !== 400 && createRes.status !== 409) {
+      this.logger.warn(`Instance create returned ${createRes.status}`);
+    }
+  }
+
+  /** Calls /instance/connect and extracts QR from all known Evolution v2 shapes.
+   *  Returns null when the response carries no QR (e.g. {"count":0}). */
+  private async connectAndExtractQR(): Promise<Record<string, any> | null> {
+    const r = await this.evoFetch(`/instance/connect/${this.instance}`);
+    const txt = await r.text();
+    this.logger.log(`Evolution /connect ${r.status}: ${txt.substring(0, 300)}`);
+
+    if (!r.ok) return { error: `Evolution API error (${r.status}): ${txt}` };
+
+    let data: any = {};
+    try { data = JSON.parse(txt); } catch { return { error: `Bad JSON from Evolution API: ${txt}` }; }
+
+    // Already connected
+    if (data?.instance?.state === 'open' || data?.state === 'open') return { connected: true };
+
+    // {"count":0} — instance not found in Evolution DB
+    if (typeof data?.count === 'number') return null;
+
+    // Evolution v2 QR shapes:
+    // { base64: "data:image/png;base64,..." }
+    // { qrcode: { base64: "..." } }
+    // { code: "2@..." }  ← raw string — send as-is so frontend can render via qrcode lib
+    const qr =
+      data?.base64 ||
+      data?.qrcode?.base64 ||
+      data?.code ||
+      null;
+
+    if (!qr) return null;
+
+    // Normalise to a data-URI so <img src="..."> works directly
+    const src = qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`;
+    return { qr: src };
   }
 
   async disconnect() {
