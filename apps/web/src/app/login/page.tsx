@@ -23,7 +23,7 @@ async function getMsal(): Promise<PublicClientApplication | null> {
       authority: `https://login.microsoftonline.com/${MS_TENANT_ID}`,
       redirectUri: window.location.origin + '/login',
     },
-    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+    cache: { cacheLocation: 'sessionStorage' },
   });
   await _msal.initialize();
   return _msal;
