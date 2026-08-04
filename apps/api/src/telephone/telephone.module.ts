@@ -20,8 +20,8 @@ class TelephoneService {
     limit?: number;
   }) {
     const body: Record<string, any> = { appid: this.appId, secret: this.secret };
-    if (opts.start_date) body.start_date = opts.start_date;
-    if (opts.end_date)   body.end_date   = opts.end_date;
+    if (opts.start_date) body.start_date = opts.start_date * 1000;
+    if (opts.end_date)   body.end_date   = opts.end_date * 1000;
     if (opts.page)       body.page       = opts.page;
     if (opts.limit)      body.limit      = Math.min(opts.limit, 20);
 
