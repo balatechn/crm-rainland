@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
@@ -13,7 +13,15 @@ export class UsersService {
   list(branchId?: string) {
     return this.prisma.user.findMany({
       where: branchId ? { branchId } : {},
-      select: { id:true,name:true,email:true,phone:true,role:true,active:true,branchId:true,branch:{select:{name:true}},createdAt:true },
+      select: { id:true,name:true,email:true,phone:true,role:true,active:true,branchId:true,branch:{select:{name:true}},createdAt:true,microsoftId:true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  listPendingSso() {
+    return this.prisma.user.findMany({
+      where: { active: false, microsoftId: { not: null } },
+      select: { id:true, name:true, email:true, createdAt:true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -33,6 +41,19 @@ export class UsersService {
     const updated = await this.prisma.user.update({ where: { id }, data: { ...data, role: data.role as Role | undefined } });
     this.audit.log(id, 'UPDATE', 'User', id, data as any);
     return updated;
+  }
+
+  async approveSsoUser(id: string, role: string, branchId?: string) {
+    const pending = await this.prisma.user.findUnique({ where: { id } });
+    if (!pending || !pending.microsoftId) throw new NotFoundException('Pending SSO user not found');
+
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { active: true, role: role as Role, branchId: branchId || null },
+      select: { id:true, name:true, email:true, role:true, branchId:true },
+    });
+    this.audit.log(id, 'APPROVE_SSO', 'User', id, { role, branchId });
+    return user;
   }
 
   loginHistory(userId: string) {

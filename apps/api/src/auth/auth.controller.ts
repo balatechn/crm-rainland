@@ -13,6 +13,12 @@ export class AuthController {
     return this.auth.login(body.email, body.password, req.ip, req.headers['user-agent']);
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @Post('microsoft')
+  microsoft(@Body() body: { idToken: string }, @Req() req: any) {
+    return this.auth.loginWithMicrosoft(body.idToken, req.ip, req.headers['user-agent']);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: any) {

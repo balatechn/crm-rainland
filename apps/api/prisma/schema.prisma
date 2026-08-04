@@ -94,7 +94,8 @@ model User {
   name         String
   email        String     @unique
   phone        String?
-  passwordHash String
+  passwordHash String  @default("")
+  microsoftId  String? @unique
   role         Role
   active       Boolean    @default(true)
   twoFactorOn  Boolean    @default(false)

@@ -1,17 +1,60 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import type { PublicClientApplication, AuthenticationResult } from '@azure/msal-browser';
 import { api, setToken, setUser } from '@/lib/api';
 
 const LOGO = 'https://rainlandautocorp.com/logo.png';
 const HERO = 'https://rainlandautocorp.com/landing.png';
 
+const MS_CLIENT_ID  = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID  || '';
+const MS_TENANT_ID  = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID  || 'common';
+
+// Lazy MSAL instance — only initialized in browser when env vars are present
+let _msal: PublicClientApplication | null = null;
+
+async function getMsal(): Promise<PublicClientApplication | null> {
+  if (!MS_CLIENT_ID || typeof window === 'undefined') return null;
+  if (_msal) return _msal;
+  const { PublicClientApplication } = await import('@azure/msal-browser');
+  _msal = new PublicClientApplication({
+    auth: {
+      clientId: MS_CLIENT_ID,
+      authority: `https://login.microsoftonline.com/${MS_TENANT_ID}`,
+      redirectUri: window.location.origin + '/login',
+    },
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+  });
+  await _msal.initialize();
+  return _msal;
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@rainland.in');
+  const [email,    setEmail]    = useState('admin@rainland.in');
   const [password, setPassword] = useState('Admin@123');
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [err,      setErr]      = useState<string | null>(null);
+  const [busy,     setBusy]     = useState(false);
+  const [pending,  setPending]  = useState(false);
+  const [msReady,  setMsReady]  = useState(false);
+  const handled = useRef(false);
+
+  // Handle MSAL redirect on mount
+  useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+
+    getMsal().then(async msal => {
+      if (!msal) return;
+      setMsReady(true);
+      try {
+        const result: AuthenticationResult | null = await msal.handleRedirectPromise();
+        if (result?.idToken) await signInWithMsToken(result.idToken);
+      } catch (e: any) {
+        setErr(e.message || 'Microsoft redirect error');
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setErr(null);
@@ -24,6 +67,40 @@ export default function LoginPage() {
     } catch (e: any) { setErr(e.message || 'Login failed'); }
     finally { setBusy(false); }
   }
+
+  async function signInWithMicrosoft() {
+    setBusy(true); setErr(null);
+    try {
+      const msal = await getMsal();
+      if (!msal) { setErr('Microsoft SSO is not configured'); setBusy(false); return; }
+      await msal.loginRedirect({ scopes: ['openid', 'profile', 'email'] });
+      // page navigates away; busy stays true
+    } catch (e: any) {
+      setErr(e.message || 'Microsoft redirect failed');
+      setBusy(false);
+    }
+  }
+
+  async function signInWithMsToken(idToken: string) {
+    setBusy(true); setErr(null);
+    try {
+      const res = await api<any>('/auth/microsoft', {
+        method: 'POST', body: JSON.stringify({ idToken }),
+      });
+      if (res.pending) {
+        setPending(true);
+      } else {
+        setToken(res.token); setUser(res.user);
+        router.push('/dashboard');
+      }
+    } catch (e: any) {
+      setErr(e.message || 'Microsoft sign-in failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const msConfigured = !!MS_CLIENT_ID;
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-slate-950 text-white">
@@ -76,46 +153,70 @@ export default function LoginPage() {
           <div className="mb-7">
             <div className="text-xs uppercase tracking-widest text-brand font-semibold">Dealer Operations Portal</div>
             <h2 className="text-3xl font-bold text-gray-900 mt-1">Sign in to your account</h2>
-            <p className="text-sm text-gray-500 mt-2">Use your Rainland CRM credentials to continue.</p>
+            <p className="text-sm text-gray-500 mt-2">Use your Rainland CRM or Microsoft credentials.</p>
           </div>
 
-          <form onSubmit={submit} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <input
-                className="input mt-1"
-                value={email}
-                onChange={e=>setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
+          {/* Pending approval state */}
+          {pending ? (
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 p-6 text-center space-y-3">
+              <div className="text-3xl">⏳</div>
+              <div className="text-base font-semibold text-amber-800">Account Pending Approval</div>
+              <p className="text-sm text-amber-700">
+                Your Microsoft account has been registered. An administrator will review and approve your access shortly.
+              </p>
+              <p className="text-xs text-amber-600 mt-1">Contact your system administrator if urgent.</p>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Password</label>
-              <input
-                className="input mt-1"
-                type="password"
-                value={password}
-                onChange={e=>setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            {err && <div className="text-sm text-red-700 bg-red-50 border border-red-200 p-2.5 rounded">{err}</div>}
-            <button className="btn btn-primary w-full h-11 text-base" disabled={busy}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+          ) : (
+            <>
+              {/* Microsoft SSO button */}
+              {msConfigured && (
+                <button
+                  onClick={signInWithMicrosoft}
+                  disabled={busy}
+                  className="w-full flex items-center justify-center gap-3 h-11 mb-4 border-2 border-gray-200 rounded-xl bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-700 font-semibold text-sm transition-all disabled:opacity-50 shadow-sm"
+                >
+                  <MicrosoftIcon />
+                  {busy && !pending ? 'Redirecting…' : 'Sign in with Microsoft'}
+                </button>
+              )}
 
-          <div className="mt-6 flex items-center gap-3 text-xs text-gray-400">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span>Authorized dealership staff only</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
+              {msConfigured && (
+                <div className="flex items-center gap-3 text-xs text-gray-400 mb-4">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span>or sign in with email</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              )}
 
-          <div className="mt-4 text-xs text-gray-500 text-center">
-            Default credentials: <span className="font-mono">admin@rainland.in</span> / <span className="font-mono">Admin@123</span>
-          </div>
+              <form onSubmit={submit} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <input
+                    className="input mt-1"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Password</label>
+                  <input
+                    className="input mt-1"
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+                {err && <div className="text-sm text-red-700 bg-red-50 border border-red-200 p-2.5 rounded">{err}</div>}
+                <button className="btn btn-primary w-full h-11 text-base" disabled={busy}>
+                  {busy ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+            </>
+          )}
 
           <div className="mt-8 text-center text-xs text-gray-400">
             <a href="https://rainlandautocorp.com" target="_blank" rel="noreferrer" className="hover:text-brand">rainlandautocorp.com</a>
@@ -136,5 +237,16 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-wider text-blue-200">{label}</div>
       <div className="text-sm font-semibold text-white mt-0.5">{value}</div>
     </div>
+  );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+    </svg>
   );
 }

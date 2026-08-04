@@ -11,7 +11,6 @@ export class UsersController {
 
   @Get()
   list(@Req() req: any, @Query('branchId') branchId?: string) {
-    // Non-HO roles only see users in their own branch
     const user = req.user;
     const effectiveBranch = [Role.ADMIN, Role.CRM_MANAGER, Role.SALES_HEAD].includes(user.role)
       ? branchId
@@ -20,8 +19,18 @@ export class UsersController {
   }
 
   @Roles(Role.ADMIN, Role.CRM_MANAGER)
+  @Get('pending-sso')
+  listPendingSso() { return this.svc.listPendingSso(); }
+
+  @Roles(Role.ADMIN, Role.CRM_MANAGER)
   @Post()
   create(@Body() body: CreateUserDto) { return this.svc.create(body); }
+
+  @Roles(Role.ADMIN, Role.CRM_MANAGER)
+  @Post(':id/approve')
+  approve(@Param('id') id: string, @Body() body: { role: string; branchId?: string }) {
+    return this.svc.approveSsoUser(id, body.role, body.branchId);
+  }
 
   @Roles(Role.ADMIN, Role.CRM_MANAGER)
   @Patch(':id')
