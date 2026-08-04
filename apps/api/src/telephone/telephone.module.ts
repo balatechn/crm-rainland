@@ -1,17 +1,22 @@
 import {
-  Module, Controller, Get, Query, Res, NotFoundException,
-  StreamableFile, UseGuards, Injectable, Logger, BadRequestException,
+  Module, Controller, Get, Patch, Query, Param, Body, Res,
+  NotFoundException, StreamableFile, UseGuards, Injectable,
+  Logger, BadRequestException, Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { PrismaService } from '../prisma/prisma.module';
 
 const TELECMI_BASE = 'https://rest.telecmi.com/v2';
 
 @Injectable()
 class TelephoneService {
   private readonly logger = new Logger(TelephoneService.name);
+  constructor(private prisma: PrismaService) {}
 
   private get appId()  { return Number(process.env.TELECMI_APP_ID); }
   private get secret() { return process.env.TELECMI_SECRET || ''; }
+
+  // ── TeleCMI ────────────────────────────────────────────────────────────────
 
   async getCalls(opts: {
     start_date?: number;
@@ -51,7 +56,45 @@ class TelephoneService {
     const contentType = r.headers.get('content-type') || 'audio/wav';
     return { buffer, contentType };
   }
+
+  // ── Local logs ─────────────────────────────────────────────────────────────
+
+  async getLogs(cmiuids: string[]) {
+    if (!cmiuids.length) return [];
+    return this.prisma.telephoneLog.findMany({
+      where: { cmiuid: { in: cmiuids } },
+      include: {
+        lead: { select: { id: true, name: true, mobile: true } },
+        updatedBy: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async upsertLog(
+    cmiuid: string,
+    userId: string,
+    data: { callerName?: string; disposition?: string; notes?: string; leadId?: string | null },
+  ) {
+    return this.prisma.telephoneLog.upsert({
+      where: { cmiuid },
+      create: { cmiuid, ...data, updatedById: userId },
+      update: { ...data, updatedById: userId },
+      include: { lead: { select: { id: true, name: true, mobile: true } } },
+    });
+  }
+
+  searchLeads(mobile: string) {
+    const q = mobile.replace(/\D/g, '').slice(-10);
+    return this.prisma.lead.findMany({
+      where: { mobile: { contains: q } },
+      select: { id: true, name: true, mobile: true, status: true, branch: { select: { name: true } } },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
+
+// ── Controller ────────────────────────────────────────────────────────────────
 
 @UseGuards(JwtAuthGuard)
 @Controller('telephone')
@@ -83,6 +126,27 @@ class TelephoneController {
     res.set('Content-Type', contentType);
     res.set('Content-Disposition', `inline; filename="${file}"`);
     return new StreamableFile(buffer);
+  }
+
+  @Get('logs')
+  getLogs(@Query('cmiuids') cmiuids?: string) {
+    const ids = (cmiuids || '').split(',').map(s => s.trim()).filter(Boolean);
+    return this.svc.getLogs(ids);
+  }
+
+  @Patch('logs/:cmiuid')
+  upsertLog(
+    @Param('cmiuid') cmiuid: string,
+    @Body() body: { callerName?: string; disposition?: string; notes?: string; leadId?: string | null },
+    @Req() req: any,
+  ) {
+    return this.svc.upsertLog(cmiuid, req.user.id, body);
+  }
+
+  @Get('leads/search')
+  searchLeads(@Query('mobile') mobile: string) {
+    if (!mobile) return [];
+    return this.svc.searchLeads(mobile);
   }
 }
 
