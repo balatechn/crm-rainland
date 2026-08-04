@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Phone, Play, X, PhoneIncoming, PhoneOutgoing, Clock,
   Calendar, Search, ExternalLink, UserPlus, ChevronRight, Save,
-  PhoneMissed,
+  PhoneMissed, RefreshCw, Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api, apiUrl, getToken } from '@/lib/api';
@@ -356,16 +356,19 @@ function EditPanel({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function TelephonePage() {
-  const [data,       setData]       = useState<CallsResponse>({ count: 0, cdr: [] });
-  const [logs,       setLogs]       = useState<Record<string, TelLog>>({});
-  const [loading,    setLoading]    = useState(true);
-  const [range,      setRange]      = useState<DateRange>('today');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo,   setCustomTo]   = useState('');
-  const [page,       setPage]       = useState(1);
-  const [playFile,   setPlayFile]   = useState<string | null>(null);
-  const [editCall,   setEditCall]   = useState<CallRecord | null>(null);
+  const [data,          setData]          = useState<CallsResponse>({ count: 0, cdr: [] });
+  const [logs,          setLogs]          = useState<Record<string, TelLog>>({});
+  const [loading,       setLoading]       = useState(true);
+  const [range,         setRange]         = useState<DateRange>('today');
+  const [customFrom,    setCustomFrom]    = useState('');
+  const [customTo,      setCustomTo]      = useState('');
+  const [page,          setPage]          = useState(1);
+  const [playFile,      setPlayFile]      = useState<string | null>(null);
+  const [editCall,      setEditCall]      = useState<CallRecord | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [autoSecs,      setAutoSecs]      = useState(120); // countdown for auto-refresh
   const LIMIT = 20;
+  const AUTO_INTERVAL = 120; // seconds
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -395,9 +398,23 @@ export default function TelephonePage() {
       setData({ count: 0, cdr: [] });
     }
     setLoading(false);
+    setLastRefreshed(new Date());
+    setAutoSecs(AUTO_INTERVAL);
   }, [range, customFrom, customTo, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh countdown + trigger (Today tab only)
+  useEffect(() => {
+    if (range !== 'today') return;
+    const tick = setInterval(() => {
+      setAutoSecs(s => {
+        if (s <= 1) { load(); return AUTO_INTERVAL; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [range, load]);
 
   function onLogSaved(updated: TelLog) {
     setLogs(prev => ({ ...prev, [updated.cmiuid]: updated }));
@@ -437,33 +454,53 @@ export default function TelephonePage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 mb-5 flex flex-wrap gap-3 items-center">
-        <div className="flex gap-2">
-          {(['today','yesterday','last7','custom'] as DateRange[]).map(r => (
-            <button key={r}
-              onClick={() => { setRange(r); setPage(1); }}
-              className={cn(
-                'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all',
-                range === r ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]',
-              )}
-            >
-              {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : r === 'last7' ? 'Last 7 Days' : 'Custom'}
-            </button>
-          ))}
-        </div>
-        {range === 'custom' && (
-          <div className="flex items-center gap-2">
-            <input type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1); }}
-              className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
-            <span className="text-xs text-[#94A3B8]">to</span>
-            <input type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1); }}
-              className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 mb-5 space-y-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex gap-2">
+            {(['today','yesterday','last7','custom'] as DateRange[]).map(r => (
+              <button key={r}
+                onClick={() => { setRange(r); setPage(1); setAutoSecs(AUTO_INTERVAL); }}
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all',
+                  range === r ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]',
+                )}
+              >
+                {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : r === 'last7' ? 'Last 7 Days' : 'Custom'}
+              </button>
+            ))}
           </div>
-        )}
-        <button onClick={load}
-          className="ml-auto px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-          Refresh
-        </button>
+          {range === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1); }}
+                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
+              <span className="text-xs text-[#94A3B8]">to</span>
+              <input type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1); }}
+                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
+            </div>
+          )}
+          <div className="ml-auto flex items-center gap-3">
+            {/* Last refreshed + auto-refresh countdown */}
+            {lastRefreshed && (
+              <span className="text-[11px] text-[#94A3B8] flex items-center gap-1">
+                <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
+                {loading ? 'Refreshing…' : (
+                  range === 'today'
+                    ? `Auto-refresh in ${autoSecs}s`
+                    : `Refreshed ${lastRefreshed.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}`
+                )}
+              </span>
+            )}
+            <button onClick={() => { load(); setAutoSecs(AUTO_INTERVAL); }}
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+              <RefreshCw size={11} /> Refresh
+            </button>
+          </div>
+        </div>
+        {/* CDR delay notice */}
+        <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          <Info size={12} className="mt-0.5 shrink-0" />
+          TeleCMI CDR updates may take <strong className="mx-0.5">5–15 minutes</strong> after a call ends. Recent calls will appear automatically.
+        </div>
       </div>
 
       {/* Table */}
