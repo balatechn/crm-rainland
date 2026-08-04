@@ -9,13 +9,13 @@ type CallRecord = {
   duration: number;
   billedsec: number;
   agent: string;
-  from: string;
-  to: string;
-  time: string;
+  from: string | number;
+  to: string | number;
+  time: string | number;
   filename: string;
-  record: boolean;
+  record: boolean | string;
   name: string;
-  notes: { note: string; time: string }[];
+  notes?: { note: string; time: string }[];
 };
 
 type CallsResponse = { count: number; cdr: CallRecord[] };
@@ -45,14 +45,16 @@ function dateRangeToBounds(range: DateRange, customFrom: string, customTo: strin
   return { start_date: toUtcTs(start), end_date: toUtcTs(end) };
 }
 
+function fmtPhone(n: string | number) { return String(n || '—'); }
+
 function fmtDuration(sec: number) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}m ${s}s`;
 }
 
-function fmtTime(ts: string) {
-  return new Date(ts).toLocaleString('en-IN', {
+function fmtTime(ts: string | number) {
+  return new Date(Number(ts)).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -246,7 +248,8 @@ export default function TelephonePage() {
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {data.cdr.map((call) => {
-                  const isInbound = call.to && !call.from?.startsWith('91');
+                  const fromStr = String(call.from || '');
+                  const isInbound = call.to && !fromStr.startsWith('91');
                   return (
                     <tr key={call.cmiuid} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="px-5 py-3.5">
@@ -260,8 +263,8 @@ export default function TelephonePage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-xs text-[#374151]">{call.from || '—'}</td>
-                      <td className="px-5 py-3.5 font-mono text-xs text-[#374151]">{call.to || '—'}</td>
+                      <td className="px-5 py-3.5 font-mono text-xs text-[#374151]">{fmtPhone(call.from)}</td>
+                      <td className="px-5 py-3.5 font-mono text-xs text-[#374151]">{fmtPhone(call.to)}</td>
                       <td className="px-5 py-3.5 text-xs text-[#374151]">
                         <div className="flex items-center gap-1.5">
                           <User size={11} className="text-[#94A3B8] shrink-0" />
@@ -284,7 +287,7 @@ export default function TelephonePage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
-                        {call.record && call.filename ? (
+                        {(call.record === true || call.record === 'true') && call.filename ? (
                           <button
                             onClick={() => setPlayFile(call.filename)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors"
