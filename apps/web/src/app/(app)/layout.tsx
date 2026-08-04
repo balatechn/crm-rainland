@@ -4,9 +4,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, Users, Phone, FileText, Car, Building2,
-  CalendarCheck, ClipboardList, Truck, MessageCircle, BarChart3,
+  CalendarCheck, ClipboardList, Truck, BarChart3,
   LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
-  Bell, Search, UserCircle, Landmark, Store, BellRing,
+  Bell, Search, UserCircle, Landmark, Store, BellRing, PhoneCall,
 } from 'lucide-react';
 import { getToken, getUser, setToken, setUser, api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -164,8 +164,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   function logout() { setToken(null); setUser(null); router.replace('/login'); }
 
-  const isDash     = pathname === '/dashboard';
-  const isWhatsApp = pathname?.startsWith('/whatsapp');
+  const isDash = pathname === '/dashboard';
   const ROLE_SHORT: Record<string,string> = {
     ADMIN:'Admin', CRM_MANAGER:'CRM Mgr', CALL_CENTER:'Call Ctr',
     SALES_HEAD:'Sales Head', BRANCH_MANAGER:'Br. Mgr', SALES_EXECUTIVE:'Exec', TEAM_LEADER:'TL',
@@ -206,7 +205,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center flex-1">
             {navLink('/dashboard', 'Dashboard', LayoutDashboard, true)}
-            {(['CALL_CENTER','ADMIN'] as string[]).includes(user?.role) && navLink('/whatsapp', 'WhatsApp', MessageCircle)}
+            {(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'] as string[]).includes(user?.role) && navLink('/telephone', 'Telephone', PhoneCall)}
             <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
             <DropdownMenu label="Operations"   items={OPERATIONS_ITEMS}   pathname={pathname} user={user} />
             <DropdownMenu label="Reports"      items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
@@ -376,8 +375,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
               {[
                 { href:'/dashboard', label:'Dashboard', Icon:LayoutDashboard },
-                ...((['CALL_CENTER','ADMIN'] as string[]).includes(user?.role)
-                  ? [{ href:'/whatsapp', label:'WhatsApp', Icon:MessageCircle }]
+                ...(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'].includes(user?.role)
+                  ? [{ href:'/telephone', label:'Telephone', Icon:PhoneCall }]
                   : []),
               ].map(({ href, label, Icon }) => (
                 <Link key={href} href={href}

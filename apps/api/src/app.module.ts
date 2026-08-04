@@ -24,6 +24,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { WalkInsModule } from './walk-ins/walk-ins.module';
 import { MailModule } from './mail/mail.module';
+import { TelephoneModule } from './telephone/telephone.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { MailModule } from './mail/mail.module';
     ReportsModule,
     AuditModule,
     BootstrapModule,
+    TelephoneModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
