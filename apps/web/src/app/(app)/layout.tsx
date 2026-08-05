@@ -186,7 +186,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="max-w-screen-2xl mx-auto px-5 lg:px-8 h-full flex items-center gap-2">
 
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0 mr-3">
+          <Link href="/telephone" className="flex items-center gap-2.5 shrink-0 mr-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="https://rainlandautocorp.com/logo.png" alt="Rainland Auto Corp" className="h-9 w-auto object-contain" />
             <span className="hidden sm:inline text-[10px] font-bold bg-[#2563EB33] text-[#3B82F6] px-2 py-0.5 rounded-md tracking-widest">CRM</span>

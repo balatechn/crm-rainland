@@ -63,7 +63,7 @@ export default function LoginPage() {
         method: 'POST', body: JSON.stringify({ email, password }),
       });
       setToken(res.token); setUser(res.user);
-      router.push('/dashboard');
+      router.push('/telephone');
     } catch (e: any) { setErr(e.message || 'Login failed'); }
     finally { setBusy(false); }
   }
@@ -91,7 +91,7 @@ export default function LoginPage() {
         setPending(true);
       } else {
         setToken(res.token); setUser(res.user);
-        router.push('/dashboard');
+        router.push('/telephone');
       }
     } catch (e: any) {
       setErr(e.message || 'Microsoft sign-in failed');
