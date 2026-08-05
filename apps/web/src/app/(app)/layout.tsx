@@ -3,10 +3,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
-  LayoutDashboard, Users, Phone, FileText, Car, Building2,
-  CalendarCheck, ClipboardList, Truck, BarChart3,
-  LogOut, Menu, X, Tag, ShieldCheck, History, ChevronDown,
-  Bell, Search, UserCircle, Landmark, Store, BellRing, PhoneCall,
+  LayoutDashboard, Users, Phone, Car, Building2,
+  CalendarCheck, ClipboardList, BarChart3,
+  LogOut, Menu, X, ShieldCheck, History, ChevronDown,
+  Bell, Search, UserCircle, Store, BellRing, PhoneCall,
 } from 'lucide-react';
 import { getToken, getUser, setToken, setUser, api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -19,12 +19,6 @@ const SALES_ITEMS: NavItem[] = [
   { href: '/follow-ups',  label: 'Follow-Ups',   icon: BellRing },
   { href: '/test-drives', label: 'Test Drives',  icon: CalendarCheck },
   { href: '/pipeline',    label: 'Pipeline',     icon: ClipboardList },
-];
-const OPERATIONS_ITEMS: NavItem[] = [
-  { href: '/quotations',  label: 'Quotations',   icon: FileText },
-  { href: '/bookings',    label: 'Bookings',     icon: Tag },
-  { href: '/finance',     label: 'Finance',      icon: Landmark },
-  { href: '/deliveries',  label: 'Deliveries',   icon: Truck },
 ];
 const INTELLIGENCE_ITEMS: NavItem[] = [
   { href: '/reports',     label: 'Reports',      icon: BarChart3 },
@@ -164,7 +158,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   function logout() { setToken(null); setUser(null); router.replace('/login'); }
 
-  const isDash = pathname === '/dashboard';
   const ROLE_SHORT: Record<string,string> = {
     ADMIN:'Admin', CRM_MANAGER:'CRM Mgr', CALL_CENTER:'Call Ctr',
     SALES_HEAD:'Sales Head', BRANCH_MANAGER:'Br. Mgr', SALES_EXECUTIVE:'Exec', TEAM_LEADER:'TL',
@@ -204,10 +197,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center flex-1">
-            {navLink('/dashboard', 'Dashboard', LayoutDashboard, true)}
             {(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'] as string[]).includes(user?.role) && navLink('/telephone', 'Telephone', PhoneCall)}
             <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
-            <DropdownMenu label="Operations"   items={OPERATIONS_ITEMS}   pathname={pathname} user={user} />
             <DropdownMenu label="Reports"      items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
             <DropdownMenu label="Admin"        items={ADMIN_ITEMS}        pathname={pathname} user={user} />
           </nav>
@@ -374,7 +365,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
               {[
-                { href:'/dashboard', label:'Dashboard', Icon:LayoutDashboard },
                 ...(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'].includes(user?.role)
                   ? [{ href:'/telephone', label:'Telephone', Icon:PhoneCall }]
                   : []),
@@ -386,10 +376,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
               {[
-                { label:'Sales',        items:SALES_ITEMS },
-                { label:'Operations',   items:OPERATIONS_ITEMS },
-                { label:'Reports',      items:INTELLIGENCE_ITEMS },
-                { label:'Admin',        items:ADMIN_ITEMS },
+                { label:'Sales',   items:SALES_ITEMS },
+                { label:'Reports', items:INTELLIGENCE_ITEMS },
+                { label:'Admin',   items:ADMIN_ITEMS },
               ].map(({ label, items }) => {
                 const filtered = items.filter(n => !n.roles || (user && n.roles.includes(user.role)));
                 if (!filtered.length) return null;
