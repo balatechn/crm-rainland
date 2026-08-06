@@ -537,9 +537,10 @@ export default function TelephonePage() {
   // Client-side filtered CDR
   const filteredCdr = useMemo(() => {
     return data.cdr.filter(c => {
-      if (filterType==='MISSED'   && !isMissed(c))   return false;
-      if (filterType==='INBOUND'  && (isMissed(c)||!isInbound(c))) return false;
-      if (filterType==='OUTBOUND' && (isMissed(c)||isInbound(c)))  return false;
+      // Direction filters include both answered AND missed calls
+      if (filterType==='MISSED'   && !isMissed(c))  return false;
+      if (filterType==='INBOUND'  && !isInbound(c)) return false;
+      if (filterType==='OUTBOUND' && isInbound(c))  return false;
       if (filterAgent && c.agent !== filterAgent)    return false;
       if (filterDisp) {
         const l = logs[c.cmiuid];
@@ -729,30 +730,33 @@ export default function TelephonePage() {
                 {pagedCdr.map(call => {
                   const log  = logs[call.cmiuid] ?? null;
                   const disp = dispMeta(log?.disposition ?? null);
-                  const missed   = isMissed(call);
-                  const inbound  = !missed && isInbound(call);
-                  const name     = log?.callerName || call.name || '';
+                  const missed  = isMissed(call);
+                  const inbound = isInbound(call);
+                  const name    = log?.callerName || call.name || '';
                   const displayName = name || fmtPhone(call.from);
 
                   return (
                     <tr key={call.cmiuid}
                       className={cn('group transition-colors hover:bg-slate-50/80 cursor-default', missed && 'bg-red-50/30 hover:bg-red-50/60')}>
 
-                      {/* Type */}
+                      {/* Type — always show direction, add "No Ans" if missed */}
                       <td className="px-4 py-3.5">
-                        {missed ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">
-                            <PhoneMissed size={11}/> Missed
-                          </span>
-                        ) : inbound ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
-                            <PhoneIncoming size={11}/> Inbound
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">
-                            <PhoneOutgoing size={11}/> Outbound
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {inbound ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 w-fit">
+                              <PhoneIncoming size={11}/> Inbound
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 w-fit">
+                              <PhoneOutgoing size={11}/> Outbound
+                            </span>
+                          )}
+                          {missed && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-500 w-fit">
+                              <PhoneMissed size={9}/> No Answer
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Customer */}
