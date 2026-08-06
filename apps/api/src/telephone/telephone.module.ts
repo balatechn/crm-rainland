@@ -60,6 +60,13 @@ class TelephoneService {
       return { count: 0, cdr: [], _debug: json.message };
     }
 
+    // Log first CDR record fields so we can see what TeleCMI sends
+    if (Array.isArray(json.cdr) && json.cdr.length > 0) {
+      const sample = json.cdr[0];
+      this.logger.log(`CDR sample keys: ${Object.keys(sample).join(', ')}`);
+      this.logger.log(`CDR sample type="${sample.type}" call_type="${sample.call_type}" from="${sample.from}" to="${sample.to}"`);
+    }
+
     return json;
   }
 

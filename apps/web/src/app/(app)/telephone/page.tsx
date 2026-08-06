@@ -15,6 +15,7 @@ type CallRecord = {
   cmiuid: string; duration: number; billedsec: number; agent: string;
   from: string | number; to: string | number; time: string | number;
   filename: string; record: boolean | string; name: string;
+  type?: string; call_type?: string;
 };
 type TelLog = {
   id: string; cmiuid: string; callerName: string | null;
@@ -66,8 +67,21 @@ function dateRange(range: DateRange, from: string, to: string) {
   return { start_date: toUtcTs(s), end_date: toUtcTs(e) };
 }
 
-const isMissed   = (c: CallRecord) => Number(c.billedsec) === 0;
-const isInbound  = (c: CallRecord) => !String(c.from||'').startsWith('91') || String(c.from||'').length < 10;
+const isMissed  = (c: CallRecord) => Number(c.billedsec) === 0;
+
+const isInbound = (c: CallRecord): boolean => {
+  // Use TeleCMI's explicit type field when available
+  const t = String(c.type || c.call_type || '').toLowerCase().trim();
+  if (t === 'inbound'  || t === 'in'  || t === '1') return true;
+  if (t === 'outbound' || t === 'out' || t === '2') return false;
+  // Heuristic: Indian mobile numbers are 10 digits starting with 6-9
+  // With country code they're 12 digits: 91 + [6-9] + 9 digits
+  const from = String(c.from || '').replace(/\D/g, '');
+  if (from.length === 10 && /^[6-9]/.test(from)) return true;
+  if (from.length === 12 && /^91[6-9]/.test(from)) return true;
+  return false;
+};
+
 const hasRecord  = (c: CallRecord) => (c.record === true || c.record === 'true') && c.filename;
 
 function fmtPhone(n: string|number) { return String(n||'—'); }
