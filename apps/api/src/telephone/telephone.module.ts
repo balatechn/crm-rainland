@@ -24,11 +24,18 @@ class TelephoneService {
     page?: number;
     limit?: number;
   }) {
-    const body: Record<string, any> = { appid: this.appId, secret: this.secret };
+    const body: Record<string, any> = {
+      appid:  this.appId,
+      secret: this.secret,
+    };
     if (opts.start_date) body.start_date = opts.start_date * 1000;
-    if (opts.end_date)   body.end_date   = opts.end_date * 1000;
-    if (opts.page)       body.page       = opts.page;
-    if (opts.limit)      body.limit      = Math.min(opts.limit, 20);
+    if (opts.end_date)   body.end_date   = opts.end_date   * 1000;
+    body.page  = opts.page  ?? 1;
+    body.limit = Math.min(opts.limit ?? 20, 20);
+
+    this.logger.log(
+      `TeleCMI /answered → appid=${this.appId} start=${body.start_date} end=${body.end_date} page=${body.page}`,
+    );
 
     const r = await fetch(`${TELECMI_BASE}/answered`, {
       method: 'POST',
@@ -36,11 +43,24 @@ class TelephoneService {
       body: JSON.stringify(body),
     });
 
+    const raw = await r.text();
+    this.logger.log(`TeleCMI /answered ← ${r.status} ${raw.slice(0, 300)}`);
+
     if (!r.ok) {
-      this.logger.warn(`TeleCMI /answered returned ${r.status}`);
-      return { count: 0, cdr: [] };
+      this.logger.warn(`TeleCMI /answered non-200: ${r.status}`);
+      return { count: 0, cdr: [], _debug: `HTTP ${r.status}: ${raw.slice(0,200)}` };
     }
-    return r.json();
+
+    let json: any;
+    try { json = JSON.parse(raw); } catch { return { count: 0, cdr: [], _debug: `JSON parse error: ${raw.slice(0,200)}` }; }
+
+    // TeleCMI returns { status: false, message: '...' } on soft errors
+    if (json.status === false || json.status === 'false') {
+      this.logger.warn(`TeleCMI soft-error: ${json.message}`);
+      return { count: 0, cdr: [], _debug: json.message };
+    }
+
+    return json;
   }
 
   async getRecording(file: string) {

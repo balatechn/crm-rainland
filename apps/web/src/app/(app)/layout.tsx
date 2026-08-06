@@ -198,7 +198,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center flex-1">
             {(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'] as string[]).includes(user?.role) && navLink('/telephone', 'Telephone', PhoneCall)}
-            <DropdownMenu label="Sales"        items={SALES_ITEMS}        pathname={pathname} user={user} />
             <DropdownMenu label="Reports"      items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
             <DropdownMenu label="Admin"        items={ADMIN_ITEMS}        pathname={pathname} user={user} />
           </nav>
@@ -376,7 +375,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
               {[
-                { label:'Sales',   items:SALES_ITEMS },
                 { label:'Reports', items:INTELLIGENCE_ITEMS },
                 { label:'Admin',   items:ADMIN_ITEMS },
               ].map(({ label, items }) => {

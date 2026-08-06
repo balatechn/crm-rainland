@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  Phone, Play, X, PhoneIncoming, PhoneOutgoing, Clock,
-  Calendar, Search, ExternalLink, UserPlus, ChevronRight, Save,
-  PhoneMissed, RefreshCw, Info,
+  Phone, Play, Pause, X, PhoneIncoming, PhoneOutgoing, Clock,
+  Calendar, Search, ExternalLink, UserPlus, Save, Filter,
+  PhoneMissed, RefreshCw, Info, Download, ChevronDown,
+  FileDown, Pencil, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api, apiUrl, getToken } from '@/lib/api';
@@ -11,246 +12,348 @@ import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type CallRecord = {
-  cmiuid: string;
-  duration: number;
-  billedsec: number;
-  agent: string;
-  from: string | number;
-  to: string | number;
-  time: string | number;
-  filename: string;
-  record: boolean | string;
-  name: string;
+  cmiuid: string; duration: number; billedsec: number; agent: string;
+  from: string | number; to: string | number; time: string | number;
+  filename: string; record: boolean | string; name: string;
 };
-
 type TelLog = {
-  id: string;
-  cmiuid: string;
-  callerName: string | null;
-  disposition: string | null;
-  notes: string | null;
-  leadId: string | null;
+  id: string; cmiuid: string; callerName: string | null;
+  disposition: string | null; notes: string | null; leadId: string | null;
   lead: { id: string; name: string; mobile: string } | null;
   updatedBy: { id: string; name: string } | null;
 };
-
 type CallsResponse = { count: number; cdr: CallRecord[] };
-type DateRange = 'today' | 'yesterday' | 'last7' | 'custom';
+type DateRange = 'today' | 'yesterday' | 'last7' | 'last30' | 'custom';
+type FilterType = 'ALL' | 'INBOUND' | 'OUTBOUND' | 'MISSED';
 
-// ── Dispositions ──────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 const DISPOSITIONS = [
-  { value: 'INTERESTED',     label: 'Interested',      color: 'bg-green-100 text-green-700' },
-  { value: 'CALL_BACK',      label: 'Call Back',       color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'FOLLOW_UP',      label: 'Follow Up',       color: 'bg-purple-100 text-purple-700' },
-  { value: 'CONVERTED',      label: 'Converted',       color: 'bg-blue-100 text-blue-700' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested',  color: 'bg-red-100 text-red-700' },
-  { value: 'WRONG_NUMBER',   label: 'Wrong Number',    color: 'bg-gray-100 text-gray-600' },
-  { value: 'NO_ANSWER',      label: 'No Answer',       color: 'bg-orange-100 text-orange-700' },
+  { value: 'INTERESTED',     label: 'Interested',      bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  { value: 'CALL_BACK',      label: 'Call Back',       bg: 'bg-blue-50',    text: 'text-blue-700',   dot: 'bg-blue-500' },
+  { value: 'FOLLOW_UP',      label: 'Follow Up',       bg: 'bg-orange-50',  text: 'text-orange-700', dot: 'bg-orange-500' },
+  { value: 'CONVERTED',      label: 'Converted',       bg: 'bg-purple-50',  text: 'text-purple-700', dot: 'bg-purple-500' },
+  { value: 'NOT_INTERESTED', label: 'Not Interested',  bg: 'bg-red-50',     text: 'text-red-700',    dot: 'bg-red-500' },
+  { value: 'WRONG_NUMBER',   label: 'Wrong Number',    bg: 'bg-slate-100',  text: 'text-slate-600',  dot: 'bg-slate-400' },
+  { value: 'NO_ANSWER',      label: 'No Answer',       bg: 'bg-amber-50',   text: 'text-amber-700',  dot: 'bg-amber-500' },
 ];
-
-function dispositionMeta(value: string | null) {
-  return DISPOSITIONS.find(d => d.value === value) ?? null;
-}
+const PAGE_SIZE = 15;
+const AUTO_SECS = 120;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function toUtcTs(date: Date) { return Math.floor(date.getTime() / 1000); }
+const toUtcTs = (d: Date) => Math.floor(d.getTime() / 1000);
 
-function dateRangeToBounds(range: DateRange, customFrom: string, customTo: string) {
+function dateRange(range: DateRange, from: string, to: string) {
   const now = new Date();
   if (range === 'today') {
-    const start = new Date(now); start.setHours(0, 0, 0, 0);
-    return { start_date: toUtcTs(start), end_date: toUtcTs(now) };
+    const s = new Date(now); s.setHours(0,0,0,0);
+    return { start_date: toUtcTs(s), end_date: toUtcTs(now) };
   }
   if (range === 'yesterday') {
-    const start = new Date(now); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
-    const end   = new Date(start); end.setHours(23, 59, 59, 999);
-    return { start_date: toUtcTs(start), end_date: toUtcTs(end) };
+    const s = new Date(now); s.setDate(s.getDate()-1); s.setHours(0,0,0,0);
+    const e = new Date(s); e.setHours(23,59,59,999);
+    return { start_date: toUtcTs(s), end_date: toUtcTs(e) };
   }
   if (range === 'last7') {
-    const start = new Date(now); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-    return { start_date: toUtcTs(start), end_date: toUtcTs(now) };
+    const s = new Date(now); s.setDate(s.getDate()-6); s.setHours(0,0,0,0);
+    return { start_date: toUtcTs(s), end_date: toUtcTs(now) };
   }
-  const start = customFrom ? new Date(customFrom + 'T00:00:00') : new Date(now.setHours(0,0,0,0));
-  const end   = customTo   ? new Date(customTo   + 'T23:59:59') : new Date();
-  return { start_date: toUtcTs(start), end_date: toUtcTs(end) };
+  if (range === 'last30') {
+    const s = new Date(now); s.setDate(s.getDate()-29); s.setHours(0,0,0,0);
+    return { start_date: toUtcTs(s), end_date: toUtcTs(now) };
+  }
+  const s = from ? new Date(from+'T00:00:00') : new Date(now.setHours(0,0,0,0));
+  const e = to   ? new Date(to+'T23:59:59')   : new Date();
+  return { start_date: toUtcTs(s), end_date: toUtcTs(e) };
 }
 
-function fmtPhone(n: string | number) { return String(n || '—'); }
+const isMissed   = (c: CallRecord) => Number(c.billedsec) === 0;
+const isInbound  = (c: CallRecord) => !String(c.from||'').startsWith('91') || String(c.from||'').length < 10;
+const hasRecord  = (c: CallRecord) => (c.record === true || c.record === 'true') && c.filename;
 
-function fmtDuration(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s`;
+function fmtPhone(n: string|number) { return String(n||'—'); }
+function fmtDur(sec: number) {
+  if (!sec) return '—';
+  const m = Math.floor(sec/60), s = sec%60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
+function fmtTime(ts: string|number) {
+  return new Date(Number(ts)).toLocaleString('en-IN',{ day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+function initials(name: string, phone: string) {
+  if (name && name !== 'unknown') return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  return String(phone||'?').replace(/\D/g,'').slice(-2);
+}
+function dispMeta(v: string|null) { return DISPOSITIONS.find(d=>d.value===v) ?? null; }
 
-function fmtTime(ts: string | number) {
-  return new Date(Number(ts)).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+function exportCsv(calls: CallRecord[], logs: Record<string,TelLog>) {
+  const H = ['Type','From','To','Caller Name','Agent','Duration (s)','Date & Time','Disposition','Notes','Linked Lead'];
+  const rows = calls.map(c => {
+    const l = logs[c.cmiuid];
+    const type = isMissed(c) ? 'Missed' : isInbound(c) ? 'Inbound' : 'Outbound';
+    return [type, fmtPhone(c.from), fmtPhone(c.to), l?.callerName||c.name||'',
+      c.agent||'', c.billedsec, fmtTime(c.time), l?.disposition||'', l?.notes||'', l?.lead?.name||''];
   });
+  const csv = [H,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'),{
+    href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})),
+    download: `calls_${new Date().toISOString().slice(0,10)}.csv`,
+  });
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
-function isMissed(call: CallRecord) { return Number(call.billedsec) === 0; }
+// ── Waveform ──────────────────────────────────────────────────────────────────
+function Waveform({ progress, onSeek }: { progress: number; onSeek:(p:number)=>void }) {
+  const bars = useMemo(() => Array.from({length:60},(_,i)=>
+    0.25 + Math.abs(Math.sin(i*0.4)*0.35 + Math.sin(i*0.13)*0.25 + (i%7===0?0.1:0))
+  ),[]);
+  return (
+    <div className="flex items-center gap-[2px] h-14 cursor-pointer select-none"
+      onClick={e => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        onSeek((e.clientX - rect.left) / rect.width);
+      }}>
+      {bars.map((h,i) => {
+        const filled = i/bars.length <= progress;
+        return (
+          <div key={i} className={cn('flex-1 rounded-full transition-colors duration-75',
+            filled ? 'bg-[#E11D48]' : 'bg-slate-200')}
+            style={{height:`${Math.round(h*100)}%`}} />
+        );
+      })}
+    </div>
+  );
+}
 
 // ── Audio Player Modal ────────────────────────────────────────────────────────
-function AudioPlayer({ file, onClose }: { file: string; onClose: () => void }) {
-  const [src,     setSrc]     = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+function AudioModal({ call, callerName, onClose }: {
+  call: CallRecord; callerName: string; onClose: ()=>void;
+}) {
+  const [src,      setSrc]      = useState<string|null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
+  const [playing,  setPlaying]  = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [current,  setCurrent]  = useState(0);
+  const [speed,    setSpeed]    = useState(1);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    let objectUrl: string;
+    let url = '';
     (async () => {
       try {
         const token = getToken();
-        const res = await fetch(apiUrl(`/telephone/recording?file=${encodeURIComponent(file)}`), {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        const res = await fetch(apiUrl(`/telephone/recording?file=${encodeURIComponent(call.filename)}`),{
+          headers: token ? {Authorization:`Bearer ${token}`} : {},
         });
-        if (!res.ok) throw new Error('Recording not found');
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      } catch (e: any) {
-        setError(e.message || 'Failed to load');
-      } finally {
-        setLoading(false);
-      }
+        if (!res.ok) throw new Error('Recording not available');
+        url = URL.createObjectURL(await res.blob());
+        setSrc(url);
+      } catch(e:any) { setError(e.message||'Failed'); }
+      setLoading(false);
     })();
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [file]);
+    return () => { if(url) URL.revokeObjectURL(url); };
+  }, [call.filename]);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => { setCurrent(a.currentTime); setProgress(a.duration ? a.currentTime/a.duration : 0); };
+    const onMeta = () => setDuration(a.duration);
+    const onEnd  = () => setPlaying(false);
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('loadedmetadata', onMeta);
+    a.addEventListener('ended', onEnd);
+    return () => { a.removeEventListener('timeupdate',onTime); a.removeEventListener('loadedmetadata',onMeta); a.removeEventListener('ended',onEnd); };
+  }, [src]);
+
+  useEffect(() => { if(audioRef.current) audioRef.current.playbackRate = speed; }, [speed]);
+
+  function toggle() {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); } else { a.play(); setPlaying(true); }
+  }
+
+  function seek(p: number) {
+    const a = audioRef.current;
+    if (!a || !a.duration) return;
+    a.currentTime = p * a.duration;
+  }
+
+  function download() {
+    if (!src) return;
+    Object.assign(document.createElement('a'),{href:src, download:call.filename}).click();
+  }
+
+  const fmtSec = (s:number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  const callType = isMissed(call) ? 'Missed' : isInbound(call) ? 'Inbound' : 'Outbound';
+  const typeColor = isMissed(call) ? 'text-red-500' : isInbound(call) ? 'text-emerald-600' : 'text-blue-600';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-              <Phone size={14} className="text-blue-600" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#0F172A] to-[#1E293B] px-6 py-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white font-bold text-sm">
+                {initials(callerName, String(call.from))}
+              </div>
+              <div>
+                <div className="text-white font-semibold text-sm">{callerName || fmtPhone(call.from)}</div>
+                <div className={cn('text-xs font-medium', typeColor)}>{callType} · {fmtTime(call.time)}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-semibold text-gray-900">Call Recording</div>
-              <div className="text-xs text-gray-500 truncate max-w-[220px]">{file}</div>
-            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"><X size={16}/></button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={16} /></button>
+          {/* Waveform */}
+          {loading ? (
+            <div className="flex items-center justify-center h-14 text-white/50 text-xs gap-2">
+              <div className="animate-spin h-4 w-4 border-2 border-white/40 border-t-white rounded-full"/>Loading recording…
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-14 text-red-300 text-xs">{error}</div>
+          ) : (
+            <Waveform progress={progress} onSeek={seek}/>
+          )}
         </div>
-        {loading && (
-          <div className="flex items-center justify-center h-16 text-sm text-gray-500">
-            <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mr-2" />
-            Loading…
+
+        {/* Controls */}
+        <div className="px-6 py-4">
+          {/* Time */}
+          <div className="flex justify-between text-xs text-slate-400 mb-3 font-mono">
+            <span>{fmtSec(current)}</span>
+            <span>{duration ? fmtSec(duration) : '—'}</span>
           </div>
-        )}
-        {error && <div className="text-sm text-red-500 text-center py-4">{error}</div>}
-        {src && (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <audio src={src} controls autoPlay className="w-full mt-2" style={{ borderRadius: 8 }} />
-        )}
+          {/* Buttons */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {/* Speed */}
+              {[1,1.5,2].map(s => (
+                <button key={s} onClick={() => setSpeed(s)}
+                  className={cn('px-2.5 py-1 rounded-lg text-xs font-bold border transition-all',
+                    speed===s ? 'bg-[#0F172A] text-white border-[#0F172A]' : 'border-slate-200 text-slate-500 hover:border-slate-300')}>
+                  {s}x
+                </button>
+              ))}
+            </div>
+            {/* Play/Pause */}
+            <button onClick={toggle} disabled={!src}
+              className="h-12 w-12 rounded-full bg-[#E11D48] hover:bg-[#BE123C] text-white flex items-center justify-center shadow-lg transition-all disabled:opacity-40">
+              {playing ? <Pause size={18} fill="white"/> : <Play size={18} fill="white" className="ml-0.5"/>}
+            </button>
+            {/* Download */}
+            <button onClick={download} disabled={!src}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors disabled:opacity-40">
+              <Download size={13}/> Download
+            </button>
+          </div>
+        </div>
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        {src && <audio ref={audioRef} src={src} style={{display:'none'}}/>}
       </div>
     </div>
   );
 }
 
 // ── Edit Panel ────────────────────────────────────────────────────────────────
-function EditPanel({
-  call, log, onClose, onSaved,
-}: {
-  call: CallRecord;
-  log: TelLog | null;
-  onClose: () => void;
-  onSaved: (updated: TelLog) => void;
+function EditPanel({ call, log, onClose, onSaved }:{
+  call: CallRecord; log: TelLog|null; onClose:()=>void; onSaved:(u:TelLog)=>void;
 }) {
-  const [callerName,   setCallerName]   = useState(log?.callerName  ?? call.name ?? '');
-  const [disposition,  setDisposition]  = useState(log?.disposition ?? '');
-  const [notes,        setNotes]        = useState(log?.notes       ?? '');
-  const [linkedLead,   setLinkedLead]   = useState<TelLog['lead']>(log?.lead ?? null);
-  const [leadSearch,   setLeadSearch]   = useState('');
-  const [leadResults,  setLeadResults]  = useState<any[]>([]);
-  const [searching,    setSearching]    = useState(false);
-  const [saving,       setSaving]       = useState(false);
-  const [saveErr,      setSaveErr]      = useState('');
-  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [callerName,  setCallerName]  = useState(log?.callerName  ?? call.name ?? '');
+  const [disposition, setDisposition] = useState(log?.disposition ?? '');
+  const [notes,       setNotes]       = useState(log?.notes       ?? '');
+  const [linkedLead,  setLinkedLead]  = useState<TelLog['lead']>(log?.lead ?? null);
+  const [followUp,    setFollowUp]    = useState('');
+  const [leadSearch,  setLeadSearch]  = useState('');
+  const [leadResults, setLeadResults] = useState<any[]>([]);
+  const [searching,   setSearching]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [saveErr,     setSaveErr]     = useState('');
+  const timer = useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  const fromMobile = String(call.from || '').replace(/\D/g, '').slice(-10);
+  const callType = isMissed(call) ? 'Missed' : isInbound(call) ? 'Inbound' : 'Outbound';
+  const callColor = isMissed(call) ? '#EF4444' : isInbound(call) ? '#16A34A' : '#2563EB';
+  const displayName = callerName || call.name || fmtPhone(call.from);
+  const fromMobile = String(call.from||'').replace(/\D/g,'').slice(-10);
 
   async function searchLeads(q: string) {
     if (!q || q.length < 3) { setLeadResults([]); return; }
     setSearching(true);
     try {
-      const data = await api<any[]>(`/telephone/leads/search?mobile=${encodeURIComponent(q)}`);
-      setLeadResults(Array.isArray(data) ? data : []);
+      const d = await api<any[]>(`/telephone/leads/search?mobile=${encodeURIComponent(q)}`);
+      setLeadResults(Array.isArray(d) ? d : []);
     } catch { setLeadResults([]); }
     setSearching(false);
-  }
-
-  function onLeadSearchChange(v: string) {
-    setLeadSearch(v);
-    if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => searchLeads(v), 400);
   }
 
   async function save() {
     setSaving(true); setSaveErr('');
     try {
-      const updated = await api<TelLog>(`/telephone/logs/${call.cmiuid}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          callerName: callerName || null,
-          disposition: disposition || null,
-          notes: notes || null,
-          leadId: linkedLead?.id ?? null,
-        }),
+      const updated = await api<TelLog>(`/telephone/logs/${call.cmiuid}`,{
+        method:'PATCH',
+        body: JSON.stringify({ callerName:callerName||null, disposition:disposition||null, notes:notes||null, leadId:linkedLead?.id??null }),
       });
-      onSaved(updated);
-      onClose();
-    } catch (e: any) {
-      setSaveErr(e.message || 'Save failed');
-    }
+      onSaved(updated); onClose();
+    } catch(e:any) { setSaveErr(e.message||'Save failed'); }
     setSaving(false);
   }
 
-  const createLeadUrl = `/leads/new?mobile=${fromMobile}&name=${encodeURIComponent(callerName || '')}`;
-
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full overflow-y-auto animate-slide-up">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose}/>
+      <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full overflow-hidden">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F1F5F9] sticky top-0 bg-white z-10">
-          <div>
-            <div className="text-[14px] font-bold text-[#0F172A]">Update Call Log</div>
-            <div className="text-[11px] text-[#94A3B8] mt-0.5">{fmtTime(call.time)} · {fmtPhone(call.from)} → {fmtPhone(call.to)}</div>
+        {/* Customer card */}
+        <div className="bg-gradient-to-br from-[#0F172A] to-[#1E293B] px-5 pt-5 pb-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-[11px] font-bold text-white/50 uppercase tracking-widest">Update Call Log</span>
+            <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 transition-colors"><X size={15}/></button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-base shrink-0"
+              style={{background: callColor+'33', border:`2px solid ${callColor}66`}}>
+              {initials(displayName, String(call.from))}
+            </div>
+            <div>
+              <div className="text-white font-bold text-base leading-tight">{displayName}</div>
+              <div className="text-white/60 text-xs mt-0.5">{fmtPhone(call.from)}</div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              { label:'Type',     value: callType },
+              { label:'Duration', value: fmtDur(Number(call.billedsec)) },
+              { label:'Time',     value: fmtTime(call.time) },
+            ].map(({label,value}) => (
+              <div key={label} className="bg-white/8 rounded-xl px-3 py-2">
+                <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">{label}</div>
+                <div className="text-white text-xs font-semibold mt-0.5 truncate">{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
           {/* Caller Name */}
           <div>
-            <label className="block text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Caller Name</label>
-            <input
-              value={callerName}
-              onChange={e => setCallerName(e.target.value)}
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Caller Name</label>
+            <input value={callerName} onChange={e=>setCallerName(e.target.value)}
               placeholder="Enter caller name…"
-              className="w-full border border-[#E2E8F0] rounded-xl px-3.5 py-2.5 text-sm text-[#0F172A] focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
-            />
+              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 transition-all"/>
           </div>
 
           {/* Disposition */}
           <div>
-            <label className="block text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Disposition</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Disposition</label>
             <div className="grid grid-cols-2 gap-2">
               {DISPOSITIONS.map(d => (
-                <button
-                  key={d.value}
-                  onClick={() => setDisposition(v => v === d.value ? '' : d.value)}
-                  className={cn(
-                    'px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all text-left',
-                    disposition === d.value
-                      ? `${d.color} border-current`
-                      : 'bg-white border-[#E2E8F0] text-[#64748B] hover:border-[#CBD5E1]',
-                  )}
-                >
+                <button key={d.value} onClick={() => setDisposition(v=>v===d.value?'':d.value)}
+                  className={cn('px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all text-left flex items-center gap-2',
+                    disposition===d.value ? `${d.bg} ${d.text} border-current` : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300')}>
+                  <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', d.dot)}/>
                   {d.label}
                 </button>
               ))}
@@ -259,96 +362,96 @@ function EditPanel({
 
           {/* Notes */}
           <div>
-            <label className="block text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Notes / Remarks</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Add call notes…"
-              className="w-full border border-[#E2E8F0] rounded-xl px-3.5 py-2.5 text-sm text-[#0F172A] focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-none"
-            />
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Notes</label>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}
+              placeholder="Add call notes, outcomes…"
+              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 resize-none transition-all"/>
           </div>
 
-          {/* Link to Lead */}
+          {/* Follow-up date */}
           <div>
-            <label className="block text-[11px] font-semibold text-[#64748B] uppercase tracking-wide mb-1.5">Link to Lead</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Schedule Follow-up</label>
+            <input type="datetime-local" value={followUp} onChange={e=>setFollowUp(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 transition-all"/>
+          </div>
 
+          {/* Link Lead */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Linked Lead</label>
             {linkedLead ? (
               <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
                 <div>
                   <div className="text-sm font-semibold text-blue-900">{linkedLead.name}</div>
                   <div className="text-xs text-blue-600">{linkedLead.mobile}</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Link href={`/leads/${linkedLead.id}`} target="_blank"
-                    className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600">
-                    <ExternalLink size={13} />
-                  </Link>
-                  <button onClick={() => setLinkedLead(null)}
-                    className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-400">
-                    <X size={13} />
-                  </button>
+                <div className="flex items-center gap-1.5">
+                  <Link href={`/leads/${linkedLead.id}`} target="_blank" className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600"><ExternalLink size={13}/></Link>
+                  <button onClick={()=>setLinkedLead(null)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-400"><X size={13}/></button>
                 </div>
               </div>
             ) : (
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"><Search size={13} /></div>
-                <input
-                  value={leadSearch}
-                  onChange={e => onLeadSearchChange(e.target.value)}
-                  placeholder="Search by mobile number…"
-                  className="w-full border border-[#E2E8F0] rounded-xl pl-8 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
-                />
-                {searching && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full" />
-                  </div>
-                )}
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                <input value={leadSearch}
+                  onChange={e=>{ setLeadSearch(e.target.value); if(timer.current) clearTimeout(timer.current); timer.current=setTimeout(()=>searchLeads(e.target.value),400); }}
+                  placeholder="Search by mobile…"
+                  className="w-full border border-slate-200 rounded-xl pl-8 pr-3.5 py-2.5 text-sm focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 transition-all"/>
+                {searching && <div className="absolute right-3 top-1/2 -translate-y-1/2"><div className="animate-spin h-3.5 w-3.5 border-2 border-red-400 border-t-transparent rounded-full"/></div>}
                 {leadResults.length > 0 && (
-                  <div className="absolute top-full mt-1 w-full bg-white border border-[#E2E8F0] rounded-xl shadow-lg z-10 overflow-hidden">
-                    {leadResults.map(l => (
-                      <button key={l.id}
-                        onClick={() => { setLinkedLead(l); setLeadSearch(''); setLeadResults([]); }}
-                        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-[#F8FAFC] transition-colors text-left">
+                  <div className="absolute top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                    {leadResults.map(l=>(
+                      <button key={l.id} onClick={()=>{setLinkedLead(l);setLeadSearch('');setLeadResults([]);}}
+                        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-slate-50 transition-colors text-left">
                         <div>
-                          <div className="text-[13px] font-medium text-[#0F172A]">{l.name}</div>
-                          <div className="text-[11px] text-[#64748B]">{l.mobile} · {l.branch?.name}</div>
+                          <div className="text-[13px] font-semibold text-slate-800">{l.name}</div>
+                          <div className="text-[11px] text-slate-500">{l.mobile}{l.branch ? ` · ${l.branch.name}` : ''}</div>
                         </div>
-                        <ChevronRight size={13} className="text-[#CBD5E1]" />
+                        <ChevronRight size={13} className="text-slate-300"/>
                       </button>
                     ))}
                   </div>
                 )}
-                {leadSearch.length >= 3 && !searching && leadResults.length === 0 && (
-                  <p className="text-xs text-[#94A3B8] mt-1.5 pl-1">No leads found</p>
+                {leadSearch.length>=3 && !searching && leadResults.length===0 && (
+                  <p className="text-xs text-slate-400 mt-1.5 pl-1">No leads found</p>
                 )}
               </div>
             )}
-
-            {/* Create Lead shortcut */}
-            <Link
-              href={createLeadUrl}
-              className="mt-2.5 flex items-center gap-2 px-3.5 py-2.5 border border-dashed border-[#CBD5E1] rounded-xl text-[13px] text-[#64748B] hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
-            >
-              <UserPlus size={14} /> Create new lead from this call
+            <Link href={`/leads/new?mobile=${fromMobile}&name=${encodeURIComponent(callerName||'')}`}
+              className="mt-2.5 flex items-center gap-2 px-3.5 py-2.5 border border-dashed border-slate-300 rounded-xl text-[13px] text-slate-500 hover:border-[#E11D48] hover:text-[#E11D48] hover:bg-red-50 transition-all">
+              <UserPlus size={13}/> Create new lead from this call
             </Link>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-[#F1F5F9] p-4 space-y-2">
+        <div className="border-t border-slate-100 p-4 space-y-2 bg-white">
           {saveErr && <p className="text-xs text-red-500">{saveErr}</p>}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
-          >
-            {saving
-              ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-              : <><Save size={14} /> Save Changes</>
-            }
-          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+            <button onClick={save} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#E11D48] hover:bg-[#BE123C] text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50">
+              {saving ? <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/> : <><Save size={14}/> Save</>}
+            </button>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, icon, color, bg }:{
+  label:string; value:string|number; sub?:string; icon:React.ReactNode; color:string; bg:string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 px-5 py-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className={cn('h-11 w-11 rounded-xl flex items-center justify-center shrink-0', bg)}>
+        <span className={color}>{icon}</span>
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</div>
+        <div className="text-xl font-bold text-slate-900 mt-0.5 leading-none">{value}</div>
+        {sub && <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -356,269 +459,366 @@ function EditPanel({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function TelephonePage() {
-  const [data,          setData]          = useState<CallsResponse>({ count: 0, cdr: [] });
-  const [logs,          setLogs]          = useState<Record<string, TelLog>>({});
-  const [loading,       setLoading]       = useState(true);
-  const [range,         setRange]         = useState<DateRange>('today');
-  const [customFrom,    setCustomFrom]    = useState('');
-  const [customTo,      setCustomTo]      = useState('');
-  const [page,          setPage]          = useState(1);
-  const [playFile,      setPlayFile]      = useState<string | null>(null);
-  const [editCall,      setEditCall]      = useState<CallRecord | null>(null);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const [autoSecs,      setAutoSecs]      = useState(120); // countdown for auto-refresh
-  const LIMIT = 20;
-  const AUTO_INTERVAL = 120; // seconds
+  const [data,       setData]       = useState<CallsResponse>({count:0,cdr:[]});
+  const [logs,       setLogs]       = useState<Record<string,TelLog>>({});
+  const [loading,    setLoading]    = useState(true);
+  const [apiDebug,   setApiDebug]   = useState('');
+  const [range,      setRange]      = useState<DateRange>('today');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo,   setCustomTo]   = useState('');
+  const [page,       setPage]       = useState(1);
+  const [playCall,   setPlayCall]   = useState<CallRecord|null>(null);
+  const [editCall,   setEditCall]   = useState<CallRecord|null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date|null>(null);
+  const [autoSecs,   setAutoSecs]   = useState(AUTO_SECS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Filters
+  const [filterType,       setFilterType]       = useState<FilterType>('ALL');
+  const [filterAgent,      setFilterAgent]       = useState('');
+  const [filterDisp,       setFilterDisp]        = useState('');
+  const [filterSearch,     setFilterSearch]      = useState('');
+  const [clientPage,       setClientPage]        = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setApiDebug('');
     try {
-      const bounds = dateRangeToBounds(range, customFrom, customTo);
-      const params = new URLSearchParams({
-        start_date: String(bounds.start_date),
-        end_date:   String(bounds.end_date),
-        page:       String(page),
-        limit:      String(LIMIT),
-      });
-      const res = await api<CallsResponse>(`/telephone/calls?${params}`);
+      const bounds = dateRange(range, customFrom, customTo);
+      const q = new URLSearchParams({ start_date:String(bounds.start_date), end_date:String(bounds.end_date), page:String(page), limit:'20' });
+      const res = await api<CallsResponse & { _debug?: string }>(`/telephone/calls?${q}`);
+      if (res?._debug) setApiDebug(res._debug);
       const cdr = res?.cdr ?? [];
       setData({ count: res?.count ?? 0, cdr });
-
-      // Fetch local logs for these calls
       if (cdr.length) {
-        const ids = cdr.map((c: CallRecord) => c.cmiuid).join(',');
-        const logArr = await api<TelLog[]>(`/telephone/logs?cmiuids=${ids}`);
-        const logMap: Record<string, TelLog> = {};
-        (logArr || []).forEach((l: TelLog) => { logMap[l.cmiuid] = l; });
-        setLogs(logMap);
-      } else {
-        setLogs({});
-      }
-    } catch {
-      setData({ count: 0, cdr: [] });
+        const ids = cdr.map((c:CallRecord)=>c.cmiuid).join(',');
+        const arr  = await api<TelLog[]>(`/telephone/logs?cmiuids=${ids}`);
+        const map: Record<string,TelLog> = {};
+        (arr||[]).forEach((l:TelLog)=>{ map[l.cmiuid]=l; });
+        setLogs(map);
+      } else { setLogs({}); }
+    } catch(e:any) {
+      setData({count:0,cdr:[]});
+      setApiDebug(e?.message || 'Network error');
     }
     setLoading(false);
-    setLastRefreshed(new Date());
-    setAutoSecs(AUTO_INTERVAL);
+    setLastRefresh(new Date());
+    setAutoSecs(AUTO_SECS);
   }, [range, customFrom, customTo, page]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-refresh countdown + trigger (Today tab only)
   useEffect(() => {
     if (range !== 'today') return;
-    const tick = setInterval(() => {
-      setAutoSecs(s => {
-        if (s <= 1) { load(); return AUTO_INTERVAL; }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
+    const iv = setInterval(() => setAutoSecs(s => { if(s<=1){load();return AUTO_SECS;} return s-1; }), 1000);
+    return () => clearInterval(iv);
   }, [range, load]);
 
   function onLogSaved(updated: TelLog) {
-    setLogs(prev => ({ ...prev, [updated.cmiuid]: updated }));
+    setLogs(prev=>({...prev,[updated.cmiuid]:updated}));
   }
 
-  const totalPages = Math.ceil(data.count / LIMIT);
+  // Agents list from CDR
+  const agents = useMemo(() => Array.from(new Set(data.cdr.map(c=>c.agent).filter(Boolean))), [data.cdr]);
 
-  // Summary counts
-  const missed   = data.cdr.filter(isMissed).length;
-  const answered = data.cdr.filter(c => !isMissed(c)).length;
-  const totalSec = data.cdr.reduce((s, c) => s + Number(c.billedsec), 0);
+  // Client-side filtered CDR
+  const filteredCdr = useMemo(() => {
+    return data.cdr.filter(c => {
+      if (filterType==='MISSED'   && !isMissed(c))   return false;
+      if (filterType==='INBOUND'  && (isMissed(c)||!isInbound(c))) return false;
+      if (filterType==='OUTBOUND' && (isMissed(c)||isInbound(c)))  return false;
+      if (filterAgent && c.agent !== filterAgent)    return false;
+      if (filterDisp) {
+        const l = logs[c.cmiuid];
+        if (!l || l.disposition !== filterDisp) return false;
+      }
+      if (filterSearch) {
+        const q = filterSearch.toLowerCase();
+        const l = logs[c.cmiuid];
+        const nm = (l?.callerName || c.name || '').toLowerCase();
+        if (!nm.includes(q) && !String(c.from).includes(q) && !String(c.to).includes(q)) return false;
+      }
+      return true;
+    });
+  }, [data.cdr, logs, filterType, filterAgent, filterDisp, filterSearch]);
+
+  useEffect(() => { setClientPage(1); }, [filterType, filterAgent, filterDisp, filterSearch]);
+
+  const totalClientPages = Math.ceil(filteredCdr.length / PAGE_SIZE);
+  const pagedCdr = filteredCdr.slice((clientPage-1)*PAGE_SIZE, clientPage*PAGE_SIZE);
+
+  // Summary stats
+  const statMissed   = filteredCdr.filter(isMissed).length;
+  const statAnswered = filteredCdr.filter(c=>!isMissed(c)).length;
+  const statTotalSec = filteredCdr.reduce((s,c)=>s+Number(c.billedsec),0);
+  const statAvgSec   = statAnswered ? Math.round(statTotalSec/statAnswered) : 0;
+
+  const hasActiveFilter = filterType!=='ALL' || filterAgent || filterDisp || filterSearch;
+  const DATE_LABELS: Record<DateRange,string> = { today:'Today', yesterday:'Yesterday', last7:'Last 7 Days', last30:'Last 30 Days', custom:'Custom' };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-screen-2xl mx-auto space-y-5">
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center">
-            <Phone size={18} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-[#0F172A]">Telephone</h1>
-            <p className="text-xs text-[#64748B]">TeleCMI Call Logs</p>
-          </div>
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Call Activity</h1>
+          <p className="text-sm text-slate-500 mt-0.5">TeleCMI · Real-time call logs & analytics</p>
         </div>
-
-        {/* Summary pills */}
-        {!loading && data.count > 0 && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="px-3 py-1.5 bg-[#F1F5F9] rounded-full text-[#475569] font-medium">{data.count} calls</span>
-            <span className="px-3 py-1.5 bg-green-50 rounded-full text-green-700 font-medium">{answered} answered</span>
-            {missed > 0 && <span className="px-3 py-1.5 bg-red-50 rounded-full text-red-600 font-medium">{missed} missed</span>}
-            {totalSec > 0 && <span className="px-3 py-1.5 bg-blue-50 rounded-full text-blue-700 font-medium">{fmtDuration(totalSec)} total</span>}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button onClick={() => exportCsv(filteredCdr, logs)}
+            className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors">
+            <FileDown size={14}/> Export CSV
+          </button>
+          <button onClick={() => { load(); setAutoSecs(AUTO_SECS); }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0F172A] text-white text-xs font-semibold rounded-xl hover:bg-[#1E293B] transition-colors">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''}/> Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 mb-5 space-y-3">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex gap-2">
-            {(['today','yesterday','last7','custom'] as DateRange[]).map(r => (
-              <button key={r}
-                onClick={() => { setRange(r); setPage(1); setAutoSecs(AUTO_INTERVAL); }}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all',
-                  range === r ? 'bg-[#0F172A] text-white' : 'bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]',
-                )}
-              >
-                {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : r === 'last7' ? 'Last 7 Days' : 'Custom'}
+      {/* ── Stat cards ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <StatCard label="Total Calls"    value={filteredCdr.length} icon={<Phone size={18}/>}         color="text-[#0F172A]" bg="bg-slate-100"/>
+        <StatCard label="Answered"       value={statAnswered}        icon={<PhoneIncoming size={18}/>} color="text-emerald-600" bg="bg-emerald-50"/>
+        <StatCard label="Missed"         value={statMissed}          icon={<PhoneMissed size={18}/>}   color="text-red-600"    bg="bg-red-50"/>
+        <StatCard label="Total Duration" value={fmtDur(statTotalSec)} icon={<Clock size={18}/>}        color="text-blue-600"   bg="bg-blue-50"/>
+        <StatCard label="Avg Duration"   value={fmtDur(statAvgSec)}  sub="per answered call" icon={<Calendar size={18}/>} color="text-purple-600" bg="bg-purple-50"/>
+      </div>
+
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        {/* Row 1: date + search + controls */}
+        <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-b border-slate-100">
+          {/* Date pills */}
+          <div className="flex gap-1.5 flex-wrap">
+            {(['today','yesterday','last7','last30','custom'] as DateRange[]).map(r => (
+              <button key={r} onClick={() => { setRange(r); setPage(1); setAutoSecs(AUTO_SECS); }}
+                className={cn('px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap',
+                  range===r ? 'bg-[#0F172A] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
+                {DATE_LABELS[r]}
               </button>
             ))}
           </div>
-          {range === 'custom' && (
+          {range==='custom' && (
             <div className="flex items-center gap-2">
-              <input type="date" value={customFrom} onChange={e => { setCustomFrom(e.target.value); setPage(1); }}
-                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
-              <span className="text-xs text-[#94A3B8]">to</span>
-              <input type="date" value={customTo} onChange={e => { setCustomTo(e.target.value); setPage(1); }}
-                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400" />
+              <input type="date" value={customFrom} onChange={e=>{setCustomFrom(e.target.value);setPage(1);}}
+                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#E11D48]"/>
+              <span className="text-xs text-slate-400">to</span>
+              <input type="date" value={customTo} onChange={e=>{setCustomTo(e.target.value);setPage(1);}}
+                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#E11D48]"/>
             </div>
           )}
-          <div className="ml-auto flex items-center gap-3">
-            {/* Last refreshed + auto-refresh countdown */}
-            {lastRefreshed && (
-              <span className="text-[11px] text-[#94A3B8] flex items-center gap-1">
-                <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
-                {loading ? 'Refreshing…' : (
-                  range === 'today'
-                    ? `Auto-refresh in ${autoSecs}s`
-                    : `Refreshed ${lastRefreshed.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}`
-                )}
-              </span>
-            )}
-            <button onClick={() => { load(); setAutoSecs(AUTO_INTERVAL); }}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors">
-              <RefreshCw size={11} /> Refresh
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Search */}
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"/>
+              <input value={filterSearch} onChange={e=>setFilterSearch(e.target.value)}
+                placeholder="Search name or number…"
+                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-44 focus:outline-none focus:border-[#E11D48] focus:w-56 transition-all"/>
+            </div>
+            {/* Filter toggle */}
+            <button onClick={()=>setFiltersOpen(v=>!v)}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                filtersOpen || hasActiveFilter
+                  ? 'bg-[#E11D48] text-white border-[#E11D48]'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50')}>
+              <Filter size={12}/>
+              Filters
+              {hasActiveFilter && <span className="h-1.5 w-1.5 rounded-full bg-white"/>}
             </button>
           </div>
         </div>
-        {/* CDR delay notice */}
-        <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-          <Info size={12} className="mt-0.5 shrink-0" />
-          TeleCMI CDR updates may take <strong className="mx-0.5">5–15 minutes</strong> after a call ends. Recent calls will appear automatically.
+
+        {/* Row 2: expandable filters */}
+        {filtersOpen && (
+          <div className="px-4 py-3 flex flex-wrap gap-3 items-center bg-slate-50/50 border-b border-slate-100">
+            {/* Type filter */}
+            <div className="flex gap-1">
+              {(['ALL','INBOUND','OUTBOUND','MISSED'] as FilterType[]).map(t => (
+                <button key={t} onClick={()=>setFilterType(t)}
+                  className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                    filterType===t ? 'bg-[#0F172A] text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50')}>
+                  {t==='ALL'?'All Types':t[0]+t.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+            {/* Agent filter */}
+            {agents.length > 0 && (
+              <select value={filterAgent} onChange={e=>setFilterAgent(e.target.value)}
+                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-[#E11D48] text-slate-600">
+                <option value="">All Agents</option>
+                {agents.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            )}
+            {/* Disposition filter */}
+            <select value={filterDisp} onChange={e=>setFilterDisp(e.target.value)}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-[#E11D48] text-slate-600">
+              <option value="">All Dispositions</option>
+              {DISPOSITIONS.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+            {/* Clear */}
+            {hasActiveFilter && (
+              <button onClick={()=>{setFilterType('ALL');setFilterAgent('');setFilterDisp('');setFilterSearch('');}}
+                className="text-xs text-[#E11D48] font-semibold hover:underline">
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* CDR notice + auto-refresh */}
+        <div className="px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[11px] text-amber-600">
+            <Info size={11}/>
+            <span>CDR updates may take 5–15 min after a call ends</span>
+          </div>
+          {lastRefresh && (
+            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+              <RefreshCw size={10} className={loading ? 'animate-spin' : ''}/>
+              {loading ? 'Refreshing…' : range==='today' ? `Auto in ${autoSecs}s` : lastRefresh.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden">
+      {/* ── Table ────────────────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full" />
+          <div className="flex items-center justify-center h-52">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin h-8 w-8 border-2 border-[#E11D48] border-t-transparent rounded-full"/>
+              <span className="text-sm text-slate-400">Loading call logs…</span>
+            </div>
           </div>
-        ) : data.cdr.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-[#94A3B8]">
-            <Phone size={28} className="mb-2 opacity-30" />
-            <div className="text-sm">No calls found for this period</div>
+        ) : filteredCdr.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-52 text-slate-400">
+            <Phone size={32} className="mb-3 opacity-20"/>
+            <div className="text-sm font-medium">No calls found</div>
+            <div className="text-xs mt-1">{hasActiveFilter ? 'Try adjusting your filters' : 'No calls for this period yet'}</div>
+            {apiDebug && (
+              <div className="mt-3 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-w-sm text-center">
+                TeleCMI: {apiDebug}
+              </div>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#F1F5F9] bg-[#F8FAFC]">
-                  {['Type','From','To','Caller Name','Agent','Duration','Time','Disposition','Recording',''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-[#64748B] uppercase tracking-wide whitespace-nowrap">{h}</th>
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  {['TYPE','CUSTOMER','AGENT','DURATION','DATE & TIME','DISPOSITION','RECORDING',''].map(h=>(
+                    <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#F1F5F9]">
-                {data.cdr.map(call => {
-                  const fromStr  = String(call.from || '');
-                  const isInbound = call.to && !fromStr.startsWith('91');
-                  const missed    = isMissed(call);
-                  const log       = logs[call.cmiuid] ?? null;
-                  const disp      = dispositionMeta(log?.disposition ?? null);
-                  const displayName = log?.callerName || call.name || '—';
+              <tbody className="divide-y divide-slate-50">
+                {pagedCdr.map(call => {
+                  const log  = logs[call.cmiuid] ?? null;
+                  const disp = dispMeta(log?.disposition ?? null);
+                  const missed   = isMissed(call);
+                  const inbound  = !missed && isInbound(call);
+                  const name     = log?.callerName || call.name || '';
+                  const displayName = name || fmtPhone(call.from);
 
                   return (
                     <tr key={call.cmiuid}
-                      className={cn('transition-colors hover:bg-[#F8FAFC]', missed && 'bg-red-50/40 hover:bg-red-50/70')}>
+                      className={cn('group transition-colors hover:bg-slate-50/80 cursor-default', missed && 'bg-red-50/30 hover:bg-red-50/60')}>
 
                       {/* Type */}
                       <td className="px-4 py-3.5">
                         {missed ? (
-                          <span className="flex items-center gap-1.5 text-red-500 font-medium text-xs">
-                            <PhoneMissed size={13} /> Missed
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">
+                            <PhoneMissed size={11}/> Missed
                           </span>
-                        ) : isInbound ? (
-                          <span className="flex items-center gap-1.5 text-green-600 font-medium text-xs">
-                            <PhoneIncoming size={13} /> Inbound
+                        ) : inbound ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+                            <PhoneIncoming size={11}/> Inbound
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1.5 text-blue-600 font-medium text-xs">
-                            <PhoneOutgoing size={13} /> Outbound
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700">
+                            <PhoneOutgoing size={11}/> Outbound
                           </span>
                         )}
                       </td>
 
-                      {/* From / To */}
-                      <td className="px-4 py-3.5 font-mono text-xs text-[#374151]">{fmtPhone(call.from)}</td>
-                      <td className="px-4 py-3.5 font-mono text-xs text-[#374151]">{fmtPhone(call.to)}</td>
-
-                      {/* Caller Name */}
-                      <td className="px-4 py-3.5 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn('font-medium', log?.callerName ? 'text-[#0F172A]' : 'text-[#94A3B8]')}>
-                            {displayName}
-                          </span>
+                      {/* Customer */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0',
+                            missed ? 'bg-red-100 text-red-600' : inbound ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700')}>
+                            {initials(displayName, String(call.from))}
+                          </div>
+                          <div>
+                            <div className={cn('text-[13px] font-semibold', name ? 'text-slate-800' : 'text-slate-400')}>
+                              {displayName}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono">{fmtPhone(call.from)}</div>
+                          </div>
                           {log?.lead && (
-                            <Link href={`/leads/${log.lead.id}`}
-                              className="shrink-0 text-blue-500 hover:text-blue-700" title={log.lead.name}>
-                              <ExternalLink size={11} />
+                            <Link href={`/leads/${log.lead.id}`} className="text-blue-400 hover:text-blue-600" title={log.lead.name}>
+                              <ExternalLink size={12}/>
                             </Link>
                           )}
                         </div>
                       </td>
 
                       {/* Agent */}
-                      <td className="px-4 py-3.5 text-xs text-[#374151]">{call.agent || '—'}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-full bg-[#0F172A] flex items-center justify-center text-[9px] font-bold text-white shrink-0">
+                            {(call.agent||'?').slice(0,2).toUpperCase()}
+                          </div>
+                          <span className="text-xs text-slate-600 font-medium">{call.agent||'—'}</span>
+                        </div>
+                      </td>
 
                       {/* Duration */}
-                      <td className="px-4 py-3.5 text-xs">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
-                          <Clock size={11} className="text-[#94A3B8] shrink-0" />
-                          {missed
-                            ? <span className="text-red-400">Missed</span>
-                            : fmtDuration(Number(call.billedsec))}
+                          <Clock size={11} className="text-slate-400 shrink-0"/>
+                          <span className={cn('text-xs font-medium', missed ? 'text-red-400' : 'text-slate-700')}>
+                            {missed ? 'Missed' : fmtDur(Number(call.billedsec))}
+                          </span>
                         </div>
                       </td>
 
                       {/* Time */}
-                      <td className="px-4 py-3.5 text-xs text-[#64748B] whitespace-nowrap">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
-                          <Calendar size={11} className="text-[#94A3B8] shrink-0" />
-                          {fmtTime(call.time)}
+                          <Calendar size={11} className="text-slate-400 shrink-0"/>
+                          <span className="text-xs text-slate-600 whitespace-nowrap">{fmtTime(call.time)}</span>
                         </div>
                       </td>
 
                       {/* Disposition */}
                       <td className="px-4 py-3.5">
-                        {disp
-                          ? <span className={cn('px-2.5 py-1 rounded-full text-[11px] font-semibold', disp.color)}>{disp.label}</span>
-                          : <span className="text-[11px] text-[#CBD5E1]">—</span>
-                        }
+                        {disp ? (
+                          <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold', disp.bg, disp.text)}>
+                            <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', disp.dot)}/>
+                            {disp.label}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
                       </td>
 
                       {/* Recording */}
                       <td className="px-4 py-3.5">
-                        {(call.record === true || call.record === 'true') && call.filename ? (
-                          <button onClick={() => setPlayFile(call.filename)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors">
-                            <Play size={11} fill="currentColor" /> Play
+                        {hasRecord(call) ? (
+                          <button onClick={() => setPlayCall(call)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-[11px] font-semibold transition-colors">
+                            <Play size={10} fill="white"/> Play
                           </button>
                         ) : (
-                          <span className="text-[11px] text-[#CBD5E1]">—</span>
+                          <span className="text-[11px] text-slate-300">—</span>
                         )}
                       </td>
 
-                      {/* Update */}
+                      {/* Edit */}
                       <td className="px-4 py-3.5">
                         <button onClick={() => setEditCall(call)}
-                          className="px-3 py-1.5 text-xs font-semibold text-[#475569] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-lg transition-colors whitespace-nowrap">
-                          Update
+                          className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-[#E11D48] hover:border-red-200 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100">
+                          <Pencil size={13}/>
                         </button>
                       </td>
                     </tr>
@@ -630,21 +830,43 @@ export default function TelephonePage() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-[#F1F5F9] flex items-center justify-between">
-            <span className="text-xs text-[#64748B]">Page {page} of {totalPages} · {data.count} total</span>
-            <div className="flex gap-2">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] disabled:opacity-40 hover:bg-[#F8FAFC]">Previous</button>
-              <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] disabled:opacity-40 hover:bg-[#F8FAFC]">Next</button>
+        {totalClientPages > 1 && (
+          <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <span className="text-xs text-slate-500">
+              Showing {(clientPage-1)*PAGE_SIZE+1}–{Math.min(clientPage*PAGE_SIZE,filteredCdr.length)} of {filteredCdr.length} calls
+            </span>
+            <div className="flex items-center gap-1">
+              <button disabled={clientPage===1} onClick={()=>setClientPage(p=>p-1)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30 hover:bg-white transition-colors">
+                <ChevronLeft size={14}/>
+              </button>
+              {Array.from({length:totalClientPages},(_,i)=>i+1).filter(p=>Math.abs(p-clientPage)<=2||p===1||p===totalClientPages).map((p,i,arr)=>(
+                <span key={p}>
+                  {i>0 && arr[i-1]!==p-1 && <span className="px-1 text-slate-300 text-xs">…</span>}
+                  <button onClick={()=>setClientPage(p)}
+                    className={cn('h-7 w-7 rounded-lg text-xs font-semibold transition-all',
+                      p===clientPage ? 'bg-[#0F172A] text-white' : 'text-slate-600 hover:bg-slate-100')}>
+                    {p}
+                  </button>
+                </span>
+              ))}
+              <button disabled={clientPage>=totalClientPages} onClick={()=>setClientPage(p=>p+1)}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30 hover:bg-white transition-colors">
+                <ChevronRight size={14}/>
+              </button>
             </div>
           </div>
         )}
       </div>
 
       {/* Modals */}
-      {playFile && <AudioPlayer file={playFile} onClose={() => setPlayFile(null)} />}
+      {playCall && (
+        <AudioModal
+          call={playCall}
+          callerName={logs[playCall.cmiuid]?.callerName || playCall.name || ''}
+          onClose={() => setPlayCall(null)}
+        />
+      )}
       {editCall && (
         <EditPanel
           call={editCall}
