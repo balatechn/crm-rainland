@@ -18,56 +18,60 @@ class TelephoneService {
 
   // ── TeleCMI ────────────────────────────────────────────────────────────────
 
+  private async fetchEndpoint(
+    path: string,
+    body: Record<string, any>,
+    direction: 'inbound' | 'outbound',
+    answered: boolean,
+  ) {
+    const r = await fetch(`${TELECMI_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const raw = await r.text();
+    this.logger.log(`TeleCMI ${path} ← ${r.status} ${raw.slice(0, 200)}`);
+    if (!r.ok) return { count: 0, cdr: [] as any[] };
+    let json: any;
+    try { json = JSON.parse(raw); } catch { return { count: 0, cdr: [] as any[] }; }
+    if (json.status === false || json.status === 'false') {
+      this.logger.warn(`TeleCMI ${path} soft-error: ${json.message}`);
+      return { count: 0, cdr: [] as any[] };
+    }
+    const cdr: any[] = (json.cdr || []).map((c: any) => ({ ...c, _direction: direction, _answered: answered }));
+    return { count: Number(json.count) || cdr.length, cdr };
+  }
+
   async getCalls(opts: {
     start_date?: number;
     end_date?: number;
     page?: number;
     limit?: number;
   }) {
-    const body: Record<string, any> = {
-      appid:  this.appId,
-      secret: this.secret,
-    };
-    if (opts.start_date) body.start_date = opts.start_date * 1000;
-    if (opts.end_date)   body.end_date   = opts.end_date   * 1000;
-    body.page  = opts.page  ?? 1;
-    body.limit = Math.min(opts.limit ?? 20, 20);
+    const base: Record<string, any> = { appid: this.appId, secret: this.secret, page: 1, limit: 20 };
+    if (opts.start_date) base.start_date = opts.start_date * 1000;
+    if (opts.end_date)   base.end_date   = opts.end_date   * 1000;
 
     this.logger.log(
-      `TeleCMI /answered → appid=${this.appId} start=${body.start_date} end=${body.end_date} page=${body.page}`,
+      `TeleCMI CDR fetch → appid=${this.appId} start=${base.start_date} end=${base.end_date}`,
     );
 
-    const r = await fetch(`${TELECMI_BASE}/answered`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const [inAns, inMiss, outAns, outMiss] = await Promise.all([
+      this.fetchEndpoint('/answered',     base, 'inbound',  true),
+      this.fetchEndpoint('/missed',       base, 'inbound',  false),
+      this.fetchEndpoint('/out_answered', base, 'outbound', true),
+      this.fetchEndpoint('/out_missed',   base, 'outbound', false),
+    ]);
 
-    const raw = await r.text();
-    this.logger.log(`TeleCMI /answered ← ${r.status} ${raw.slice(0, 300)}`);
+    const cdr = [...inAns.cdr, ...inMiss.cdr, ...outAns.cdr, ...outMiss.cdr];
+    cdr.sort((a, b) => Number(b.time) - Number(a.time));
+    const count = inAns.count + inMiss.count + outAns.count + outMiss.count;
 
-    if (!r.ok) {
-      this.logger.warn(`TeleCMI /answered non-200: ${r.status}`);
-      return { count: 0, cdr: [], _debug: `HTTP ${r.status}: ${raw.slice(0,200)}` };
-    }
+    this.logger.log(
+      `CDR combined: inAns=${inAns.cdr.length} inMiss=${inMiss.cdr.length} outAns=${outAns.cdr.length} outMiss=${outMiss.cdr.length} total=${cdr.length}`,
+    );
 
-    let json: any;
-    try { json = JSON.parse(raw); } catch { return { count: 0, cdr: [], _debug: `JSON parse error: ${raw.slice(0,200)}` }; }
-
-    // TeleCMI returns { status: false, message: '...' } on soft errors
-    if (json.status === false || json.status === 'false') {
-      this.logger.warn(`TeleCMI soft-error: ${json.message}`);
-      return { count: 0, cdr: [], _debug: json.message };
-    }
-
-    // Log first CDR record fields so we can see what TeleCMI sends
-    if (Array.isArray(json.cdr) && json.cdr.length > 0) {
-      const sample = json.cdr[0];
-      this.logger.log(`CDR sample keys: ${Object.keys(sample).join(', ')}`);
-      this.logger.log(`CDR sample type="${sample.type}" call_type="${sample.call_type}" from="${sample.from}" to="${sample.to}"`);
-    }
-
-    return json;
+    return { count, cdr };
   }
 
   async getRecording(file: string) {
