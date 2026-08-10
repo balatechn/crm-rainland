@@ -5,13 +5,14 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { PrismaService } from '../prisma/prisma.module';
+import { MailService } from '../mail/mail.service';
 
 const TELECMI_BASE = 'https://rest.telecmi.com/v2';
 
 @Injectable()
 class TelephoneService {
   private readonly logger = new Logger(TelephoneService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private mail: MailService) {}
 
   private get appId()  { return Number(process.env.TELECMI_APP_ID); }
   private get secret() { return process.env.TELECMI_SECRET || ''; }
@@ -104,14 +105,44 @@ class TelephoneService {
   async upsertLog(
     cmiuid: string,
     userId: string,
-    data: { callerName?: string; disposition?: string; notes?: string; leadId?: string | null },
+    data: {
+      callerName?: string;
+      disposition?: string;
+      notes?: string;
+      leadId?: string | null;
+      testDriveRequested?: boolean;
+      callerPhone?: string;
+    },
   ) {
-    return this.prisma.telephoneLog.upsert({
+    const { callerPhone, ...rest } = data;
+
+    const log = await this.prisma.telephoneLog.upsert({
       where: { cmiuid },
-      create: { cmiuid, ...data, updatedById: userId },
-      update: { ...data, updatedById: userId },
+      create: { cmiuid, ...rest, updatedById: userId },
+      update: { ...rest, updatedById: userId },
       include: { lead: { select: { id: true, name: true, mobile: true } } },
     });
+
+    if (data.testDriveRequested) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { branch: { select: { name: true, email: true } } },
+      });
+      const branchEmail = user?.branch?.email;
+      if (branchEmail) {
+        await this.mail.sendTestDriveAlert(branchEmail, {
+          callerName: data.callerName || callerPhone || 'Unknown',
+          callerPhone: callerPhone || 'Unknown',
+          branchName: user?.branch?.name || 'Unknown',
+          agentName:  user?.name || userId,
+          callTime:   new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        });
+      } else {
+        this.logger.warn(`No branch email configured for branch of user ${userId} — test drive alert skipped`);
+      }
+    }
+
+    return log;
   }
 
   searchLeads(mobile: string) {
@@ -168,7 +199,10 @@ class TelephoneController {
   @Patch('logs/:cmiuid')
   upsertLog(
     @Param('cmiuid') cmiuid: string,
-    @Body() body: { callerName?: string; disposition?: string; notes?: string; leadId?: string | null },
+    @Body() body: {
+      callerName?: string; disposition?: string; notes?: string;
+      leadId?: string | null; testDriveRequested?: boolean; callerPhone?: string;
+    },
     @Req() req: any,
   ) {
     return this.svc.upsertLog(cmiuid, req.user.id, body);

@@ -53,6 +53,7 @@ model Branch {
   pincode   String?
   address   String?
   phone     String?
+  email     String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -365,17 +366,18 @@ model WhatsAppMessage {
 }
 
 model TelephoneLog {
-  id          String   @id @default(cuid())
-  cmiuid      String   @unique
-  callerName  String?
-  disposition String?  // INTERESTED / NOT_INTERESTED / CALL_BACK / WRONG_NUMBER / NO_ANSWER / CONVERTED / FOLLOW_UP
-  notes       String?
-  leadId      String?
-  lead        Lead?    @relation(fields: [leadId], references: [id])
-  updatedById String?
-  updatedBy   User?    @relation(fields: [updatedById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  cmiuid             String   @unique
+  callerName         String?
+  disposition        String?  // INTERESTED / NOT_INTERESTED / CALL_BACK / WRONG_NUMBER / NO_ANSWER / CONVERTED / FOLLOW_UP
+  notes              String?
+  testDriveRequested Boolean  @default(false)
+  leadId             String?
+  lead               Lead?    @relation(fields: [leadId], references: [id])
+  updatedById        String?
+  updatedBy          User?    @relation(fields: [updatedById], references: [id])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([cmiuid])
   @@index([leadId])
