@@ -83,10 +83,11 @@ model Vehicle {
 }
 
 model LeadSource {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  active Boolean @default(true)
-  leads  Lead[]
+  id            String         @id @default(cuid())
+  name          String         @unique
+  active        Boolean        @default(true)
+  leads         Lead[]
+  telephoneLogs TelephoneLog[]
 }
 
 // ============ USERS / AUTH ============
@@ -366,18 +367,20 @@ model WhatsAppMessage {
 }
 
 model TelephoneLog {
-  id                 String   @id @default(cuid())
-  cmiuid             String   @unique
+  id                 String      @id @default(cuid())
+  cmiuid             String      @unique
   callerName         String?
-  disposition        String?  // INTERESTED / NOT_INTERESTED / CALL_BACK / WRONG_NUMBER / NO_ANSWER / CONVERTED / FOLLOW_UP
+  disposition        String?     // INTERESTED / NOT_INTERESTED / CALL_BACK / WRONG_NUMBER / NO_ANSWER / CONVERTED / FOLLOW_UP
   notes              String?
-  testDriveRequested Boolean  @default(false)
+  testDriveRequested Boolean     @default(false)
+  sourceId           String?
+  source             LeadSource? @relation(fields: [sourceId], references: [id])
   leadId             String?
-  lead               Lead?    @relation(fields: [leadId], references: [id])
+  lead               Lead?       @relation(fields: [leadId], references: [id])
   updatedById        String?
-  updatedBy          User?    @relation(fields: [updatedById], references: [id])
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  updatedBy          User?       @relation(fields: [updatedById], references: [id])
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
   @@index([cmiuid])
   @@index([leadId])

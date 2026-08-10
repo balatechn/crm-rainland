@@ -21,8 +21,10 @@ type CallRecord = {
 type TelLog = {
   id: string; cmiuid: string; callerName: string | null;
   disposition: string | null; notes: string | null; leadId: string | null;
+  sourceId: string | null;
   testDriveRequested: boolean;
   lead: { id: string; name: string; mobile: string } | null;
+  source: { id: string; name: string } | null;
   updatedBy: { id: string; name: string } | null;
 };
 type CallsResponse = { count: number; cdr: CallRecord[] };
@@ -273,6 +275,8 @@ function EditPanel({ call, log, onClose, onSaved }:{
   const [disposition,        setDisposition]        = useState(log?.disposition ?? '');
   const [notes,              setNotes]              = useState(log?.notes       ?? '');
   const [testDriveRequested, setTestDriveRequested] = useState(log?.testDriveRequested ?? false);
+  const [sourceId,           setSourceId]           = useState(log?.sourceId ?? '');
+  const [sources,            setSources]            = useState<{id:string;name:string}[]>([]);
   const [linkedLead,         setLinkedLead]         = useState<TelLog['lead']>(log?.lead ?? null);
   const [followUp,           setFollowUp]           = useState('');
   const [leadSearch,         setLeadSearch]         = useState('');
@@ -281,6 +285,12 @@ function EditPanel({ call, log, onClose, onSaved }:{
   const [saving,             setSaving]             = useState(false);
   const [saveErr,            setSaveErr]            = useState('');
   const timer = useRef<ReturnType<typeof setTimeout>|null>(null);
+
+  useEffect(() => {
+    api<{id:string;name:string;active:boolean}[]>('/lead-sources')
+      .then(d => setSources((d||[]).filter(s=>s.active)))
+      .catch(()=>{});
+  }, []);
 
   const callType = isMissed(call) ? 'Missed' : isInbound(call) ? 'Inbound' : 'Outbound';
   const callColor = isMissed(call) ? '#EF4444' : isInbound(call) ? '#16A34A' : '#2563EB';
@@ -306,6 +316,7 @@ function EditPanel({ call, log, onClose, onSaved }:{
         body: JSON.stringify({
           callerName: callerName||null, disposition: disposition||null,
           notes: notes||null, leadId: linkedLead?.id??null,
+          sourceId: sourceId||null,
           testDriveRequested,
           callerPhone: fmtPhone(customerPhone(call)),
         }),
@@ -359,6 +370,18 @@ function EditPanel({ call, log, onClose, onSaved }:{
               placeholder="Enter caller name…"
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 transition-all"/>
           </div>
+
+          {/* Source of the number */}
+          {sources.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Source of the Number</label>
+              <select value={sourceId} onChange={e=>setSourceId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-[#E11D48] focus:ring-2 focus:ring-red-50 transition-all bg-white">
+                <option value="">— Select source —</option>
+                {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* Disposition */}
           <div>

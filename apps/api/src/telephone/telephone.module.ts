@@ -97,6 +97,7 @@ class TelephoneService {
       where: { cmiuid: { in: cmiuids } },
       include: {
         lead: { select: { id: true, name: true, mobile: true } },
+        source: { select: { id: true, name: true } },
         updatedBy: { select: { id: true, name: true } },
       },
     });
@@ -110,6 +111,7 @@ class TelephoneService {
       disposition?: string;
       notes?: string;
       leadId?: string | null;
+      sourceId?: string | null;
       testDriveRequested?: boolean;
       callerPhone?: string;
     },
@@ -120,7 +122,10 @@ class TelephoneService {
       where: { cmiuid },
       create: { cmiuid, ...rest, updatedById: userId },
       update: { ...rest, updatedById: userId },
-      include: { lead: { select: { id: true, name: true, mobile: true } } },
+      include: {
+        lead: { select: { id: true, name: true, mobile: true } },
+        source: { select: { id: true, name: true } },
+      },
     });
 
     if (data.testDriveRequested) {
@@ -201,7 +206,7 @@ class TelephoneController {
     @Param('cmiuid') cmiuid: string,
     @Body() body: {
       callerName?: string; disposition?: string; notes?: string;
-      leadId?: string | null; testDriveRequested?: boolean; callerPhone?: string;
+      leadId?: string | null; sourceId?: string | null; testDriveRequested?: boolean; callerPhone?: string;
     },
     @Req() req: any,
   ) {
