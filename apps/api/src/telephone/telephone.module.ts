@@ -113,10 +113,11 @@ class TelephoneService {
       leadId?: string | null;
       sourceId?: string | null;
       testDriveRequested?: boolean;
+      testDriveBranchId?: string | null;
       callerPhone?: string;
     },
   ) {
-    const { callerPhone, ...rest } = data;
+    const { callerPhone, testDriveBranchId, ...rest } = data;
 
     const log = await this.prisma.telephoneLog.upsert({
       where: { cmiuid },
@@ -129,21 +130,32 @@ class TelephoneService {
     });
 
     if (data.testDriveRequested) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        include: { branch: { select: { name: true, email: true } } },
-      });
-      const branchEmail = user?.branch?.email;
-      if (branchEmail) {
-        await this.mail.sendTestDriveAlert(branchEmail, {
+      // Use explicitly selected branch, or fall back to the agent's own branch
+      let branch: { name: string; email: string | null } | null = null;
+      if (testDriveBranchId) {
+        branch = await this.prisma.branch.findUnique({
+          where: { id: testDriveBranchId },
+          select: { name: true, email: true },
+        });
+      }
+      if (!branch) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: { branch: { select: { name: true, email: true } } },
+        });
+        branch = user?.branch ?? null;
+      }
+      const agentName = (await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name || userId;
+      if (branch?.email) {
+        await this.mail.sendTestDriveAlert(branch.email, {
           callerName: data.callerName || callerPhone || 'Unknown',
           callerPhone: callerPhone || 'Unknown',
-          branchName: user?.branch?.name || 'Unknown',
-          agentName:  user?.name || userId,
-          callTime:   new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          branchName: branch.name,
+          agentName,
+          callTime: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         });
       } else {
-        this.logger.warn(`No branch email configured for branch of user ${userId} — test drive alert skipped`);
+        this.logger.warn(`No email configured for branch — test drive alert skipped (branchId=${testDriveBranchId ?? 'auto'})`);
       }
     }
 
@@ -206,7 +218,8 @@ class TelephoneController {
     @Param('cmiuid') cmiuid: string,
     @Body() body: {
       callerName?: string; disposition?: string; notes?: string;
-      leadId?: string | null; sourceId?: string | null; testDriveRequested?: boolean; callerPhone?: string;
+      leadId?: string | null; sourceId?: string | null;
+      testDriveRequested?: boolean; testDriveBranchId?: string | null; callerPhone?: string;
     },
     @Req() req: any,
   ) {

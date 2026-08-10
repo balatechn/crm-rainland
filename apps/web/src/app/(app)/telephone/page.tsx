@@ -277,6 +277,8 @@ function EditPanel({ call, log, onClose, onSaved }:{
   const [testDriveRequested, setTestDriveRequested] = useState(log?.testDriveRequested ?? false);
   const [sourceId,           setSourceId]           = useState(log?.sourceId ?? '');
   const [sources,            setSources]            = useState<{id:string;name:string}[]>([]);
+  const [testDriveBranchId,  setTestDriveBranchId]  = useState('');
+  const [branches,           setBranches]           = useState<{id:string;name:string;city:string}[]>([]);
   const [linkedLead,         setLinkedLead]         = useState<TelLog['lead']>(log?.lead ?? null);
   const [followUp,           setFollowUp]           = useState('');
   const [leadSearch,         setLeadSearch]         = useState('');
@@ -289,6 +291,9 @@ function EditPanel({ call, log, onClose, onSaved }:{
   useEffect(() => {
     api<{id:string;name:string;active:boolean}[]>('/lead-sources')
       .then(d => setSources((d||[]).filter(s=>s.active)))
+      .catch(()=>{});
+    api<{id:string;name:string;city:string;active:boolean}[]>('/branches')
+      .then(d => setBranches((d||[]).filter(b=>b.active)))
       .catch(()=>{});
   }, []);
 
@@ -318,6 +323,7 @@ function EditPanel({ call, log, onClose, onSaved }:{
           notes: notes||null, leadId: linkedLead?.id??null,
           sourceId: sourceId||null,
           testDriveRequested,
+          testDriveBranchId: testDriveRequested ? (testDriveBranchId||null) : null,
           callerPhone: fmtPhone(customerPhone(call)),
         }),
       });
@@ -399,32 +405,50 @@ function EditPanel({ call, log, onClose, onSaved }:{
           </div>
 
           {/* Test Drive Toggle */}
-          <button type="button"
-            onClick={() => setTestDriveRequested(v => !v)}
-            className={cn(
-              'w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 transition-all text-left',
-              testDriveRequested
-                ? 'border-emerald-500 bg-emerald-50'
-                : 'border-slate-200 bg-white hover:border-slate-300',
-            )}>
-            <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-xl',
-              testDriveRequested ? 'bg-emerald-100' : 'bg-slate-100')}>
-              🚗
-            </div>
-            <div className="flex-1">
-              <div className={cn('text-sm font-semibold', testDriveRequested ? 'text-emerald-700' : 'text-slate-700')}>
-                Test Drive Requested
+          <div className={cn('rounded-xl border-2 transition-all overflow-hidden',
+            testDriveRequested ? 'border-emerald-500' : 'border-slate-200')}>
+            <button type="button"
+              onClick={() => setTestDriveRequested(v => !v)}
+              className={cn('w-full flex items-center gap-3 px-4 py-3.5 transition-all text-left',
+                testDriveRequested ? 'bg-emerald-50' : 'bg-white hover:bg-slate-50')}>
+              <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-xl',
+                testDriveRequested ? 'bg-emerald-100' : 'bg-slate-100')}>
+                🚗
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">
-                {testDriveRequested ? 'Branch will be notified by email on save' : 'Tap to mark customer as wanting a test drive'}
+              <div className="flex-1">
+                <div className={cn('text-sm font-semibold', testDriveRequested ? 'text-emerald-700' : 'text-slate-700')}>
+                  Test Drive Requested
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {testDriveRequested ? 'Select branch below — they will be notified by email' : 'Tap to mark customer as wanting a test drive'}
+                </div>
               </div>
-            </div>
-            <div className={cn('h-5 w-9 rounded-full transition-colors relative shrink-0',
-              testDriveRequested ? 'bg-emerald-500' : 'bg-slate-200')}>
-              <div className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
-                testDriveRequested ? 'translate-x-4' : 'translate-x-0.5')}/>
-            </div>
-          </button>
+              <div className={cn('h-5 w-9 rounded-full transition-colors relative shrink-0',
+                testDriveRequested ? 'bg-emerald-500' : 'bg-slate-200')}>
+                <div className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  testDriveRequested ? 'translate-x-4' : 'translate-x-0.5')}/>
+              </div>
+            </button>
+
+            {/* Branch picker — visible only when test drive is on */}
+            {testDriveRequested && (
+              <div className="px-4 pb-4 pt-1 bg-emerald-50 border-t border-emerald-100">
+                <label className="block text-[11px] font-bold text-emerald-700 uppercase tracking-wider mb-2">
+                  Which branch? *
+                </label>
+                <select value={testDriveBranchId} onChange={e=>setTestDriveBranchId(e.target.value)}
+                  className="w-full border border-emerald-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all">
+                  <option value="">— Select branch for test drive —</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}{b.city ? ` · ${b.city}` : ''}</option>
+                  ))}
+                </select>
+                {testDriveBranchId === '' && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">Please select a branch so they can be notified</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Notes */}
           <div>
