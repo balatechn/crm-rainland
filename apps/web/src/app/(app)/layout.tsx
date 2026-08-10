@@ -20,10 +20,6 @@ const SALES_ITEMS: NavItem[] = [
   { href: '/test-drives', label: 'Test Drives',  icon: CalendarCheck },
   { href: '/pipeline',    label: 'Pipeline',     icon: ClipboardList },
 ];
-const INTELLIGENCE_ITEMS: NavItem[] = [
-  { href: '/reports',       label: 'Reports',       icon: BarChart3 },
-  { href: '/reports/calls', label: 'Call Reports',  icon: PhoneCall },
-];
 const ADMIN_ITEMS: NavItem[] = [
   { href: '/masters/branches', label: 'Branches',     icon: Building2,   roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
   { href: '/masters/vehicles', label: 'Vehicles',     icon: Car,         roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
@@ -198,7 +194,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center flex-1">
             {(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'] as string[]).includes(user?.role) && navLink('/telephone', 'Telephone', PhoneCall)}
-            <DropdownMenu label="Reports"      items={INTELLIGENCE_ITEMS} pathname={pathname} user={user} />
+            {navLink('/reports/calls', 'Reports', BarChart3)}
             <DropdownMenu label="Admin"        items={ADMIN_ITEMS}        pathname={pathname} user={user} />
           </nav>
 
@@ -367,6 +363,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ...(['ADMIN','CRM_MANAGER','SALES_HEAD','CALL_CENTER','BRANCH_MANAGER','TEAM_LEADER'].includes(user?.role)
                   ? [{ href:'/telephone', label:'Telephone', Icon:PhoneCall }]
                   : []),
+                { href:'/reports/calls', label:'Reports', Icon:BarChart3 },
               ].map(({ href, label, Icon }) => (
                 <Link key={href} href={href}
                   className={cn('flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors',
@@ -375,7 +372,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               ))}
               {[
-                { label:'Reports', items:INTELLIGENCE_ITEMS },
                 { label:'Admin',   items:ADMIN_ITEMS },
               ].map(({ label, items }) => {
                 const filtered = items.filter(n => !n.roles || (user && n.roles.includes(user.role)));
