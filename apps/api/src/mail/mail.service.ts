@@ -45,21 +45,20 @@ export class MailService {
   }
 
   // ── Core send via Microsoft Graph ────────────────────────────────────────────
-  private async send(to: string, subject: string, html: string, text: string): Promise<void> {
+  private async send(to: string, subject: string, html: string, text: string, cc?: string): Promise<void> {
     const token = await this.getToken();
+    const message: any = {
+      subject,
+      body: { contentType: 'HTML', content: html },
+      toRecipients: [{ emailAddress: { address: to } }],
+    };
+    if (cc) message.ccRecipients = [{ emailAddress: { address: cc } }];
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.fromEmail)}/sendMail`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: {
-            subject,
-            body: { contentType: 'HTML', content: html },
-            toRecipients: [{ emailAddress: { address: to } }],
-          },
-          saveToSentItems: false,
-        }),
+        body: JSON.stringify({ message, saveToSentItems: false }),
       },
     );
     if (!res.ok) {
@@ -113,6 +112,7 @@ export class MailService {
     callerPhone: string;
     branchName: string;
     agentName: string;
+    agentEmail?: string;
     callTime: string;
   }): Promise<void> {
     const html = `
@@ -152,6 +152,7 @@ export class MailService {
         `🚗 Test Drive Request — ${d.callerName} (${d.callerPhone})`,
         html,
         `Test Drive Request\n\nCustomer: ${d.callerName}\nPhone: ${d.callerPhone}\nAgent: ${d.agentName}\nBranch: ${d.branchName}\nTime: ${d.callTime}\n\nPlease follow up to schedule a test drive.`,
+        d.agentEmail,
       );
       this.logger.log(`Test drive alert sent to ${to}`);
     } catch (err) {

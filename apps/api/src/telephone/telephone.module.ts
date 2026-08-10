@@ -145,13 +145,16 @@ class TelephoneService {
         });
         branch = user?.branch ?? null;
       }
-      const agentName = (await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name || userId;
+      const agent = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+      const agentName  = agent?.name  || userId;
+      const agentEmail = agent?.email || undefined;
       if (branch?.email) {
         await this.mail.sendTestDriveAlert(branch.email, {
           callerName: data.callerName || callerPhone || 'Unknown',
           callerPhone: callerPhone || 'Unknown',
           branchName: branch.name,
           agentName,
+          agentEmail,
           callTime: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         });
       } else {
