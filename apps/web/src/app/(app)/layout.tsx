@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
-  LayoutDashboard, Users, Phone, Car, Building2,
+  Users, Phone, Car, Building2,
   CalendarCheck, ClipboardList, BarChart3,
   LogOut, Menu, X, ShieldCheck, History, ChevronDown,
   Bell, Search, UserCircle, Store, BellRing, PhoneCall,
@@ -21,8 +21,8 @@ const SALES_ITEMS: NavItem[] = [
   { href: '/pipeline',    label: 'Pipeline',     icon: ClipboardList },
 ];
 const INTELLIGENCE_ITEMS: NavItem[] = [
-  { href: '/reports',     label: 'Reports',      icon: BarChart3 },
-  { href: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/reports',       label: 'Reports',       icon: BarChart3 },
+  { href: '/reports/calls', label: 'Call Reports',  icon: PhoneCall },
 ];
 const ADMIN_ITEMS: NavItem[] = [
   { href: '/masters/branches', label: 'Branches',     icon: Building2,   roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },

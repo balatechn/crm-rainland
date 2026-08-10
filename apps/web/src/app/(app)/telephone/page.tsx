@@ -73,6 +73,9 @@ const isInbound = (c: CallRecord) => c._direction === 'inbound';
 
 const hasRecord  = (c: CallRecord) => (c.record === true || c.record === 'true') && c.filename;
 
+// For inbound: customer called from `from`. For outbound: agent called `to` (customer).
+const customerPhone = (c: CallRecord) => isInbound(c) ? c.from : c.to;
+
 function fmtPhone(n: string|number) { return String(n||'—'); }
 function fmtDur(sec: number) {
   if (!sec) return '—';
@@ -89,12 +92,12 @@ function initials(name: string, phone: string) {
 function dispMeta(v: string|null) { return DISPOSITIONS.find(d=>d.value===v) ?? null; }
 
 function exportCsv(calls: CallRecord[], logs: Record<string,TelLog>) {
-  const H = ['Type','From','To','Caller Name','Agent','Duration (s)','Date & Time','Disposition','Notes','Linked Lead'];
+  const H = ['Type','Customer Number','Caller Name','Agent','Duration (s)','Date & Time','Disposition','Notes','Linked Lead'];
   const rows = calls.map(c => {
     const l = logs[c.cmiuid];
     const dir = isInbound(c) ? 'Inbound' : 'Outbound';
     const type = isMissed(c) ? `${dir} (No Answer)` : dir;
-    return [type, fmtPhone(c.from), fmtPhone(c.to), l?.callerName||c.name||'',
+    return [type, fmtPhone(customerPhone(c)), l?.callerName||c.name||'',
       c.agent||'', c.billedsec, fmtTime(c.time), l?.disposition||'', l?.notes||'', l?.lead?.name||''];
   });
   const csv = [H,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -202,10 +205,10 @@ function AudioModal({ call, callerName, onClose }: {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white font-bold text-sm">
-                {initials(callerName, String(call.from))}
+                {initials(callerName, fmtPhone(customerPhone(call)))}
               </div>
               <div>
-                <div className="text-white font-semibold text-sm">{callerName || fmtPhone(call.from)}</div>
+                <div className="text-white font-semibold text-sm">{callerName || fmtPhone(customerPhone(call))}</div>
                 <div className={cn('text-xs font-medium', typeColor)}>{callType} · {fmtTime(call.time)}</div>
               </div>
             </div>
@@ -279,8 +282,9 @@ function EditPanel({ call, log, onClose, onSaved }:{
 
   const callType = isMissed(call) ? 'Missed' : isInbound(call) ? 'Inbound' : 'Outbound';
   const callColor = isMissed(call) ? '#EF4444' : isInbound(call) ? '#16A34A' : '#2563EB';
-  const displayName = callerName || call.name || fmtPhone(call.from);
-  const fromMobile = String(call.from||'').replace(/\D/g,'').slice(-10);
+  const custPhone = customerPhone(call);
+  const displayName = callerName || call.name || fmtPhone(custPhone);
+  const fromMobile = String(custPhone||'').replace(/\D/g,'').slice(-10);
 
   async function searchLeads(q: string) {
     if (!q || q.length < 3) { setLeadResults([]); return; }
@@ -318,11 +322,11 @@ function EditPanel({ call, log, onClose, onSaved }:{
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-base shrink-0"
               style={{background: callColor+'33', border:`2px solid ${callColor}66`}}>
-              {initials(displayName, String(call.from))}
+              {initials(displayName, fmtPhone(custPhone))}
             </div>
             <div>
               <div className="text-white font-bold text-base leading-tight">{displayName}</div>
-              <div className="text-white/60 text-xs mt-0.5">{fmtPhone(call.from)}</div>
+              <div className="text-white/60 text-xs mt-0.5">{fmtPhone(custPhone)}</div>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2">
@@ -723,7 +727,8 @@ export default function TelephonePage() {
                   const missed  = isMissed(call);
                   const inbound = isInbound(call);
                   const name    = log?.callerName || call.name || '';
-                  const displayName = name || fmtPhone(call.from);
+                  const cPhone  = customerPhone(call);
+                  const displayName = name || fmtPhone(cPhone);
 
                   return (
                     <tr key={call.cmiuid}
@@ -754,13 +759,13 @@ export default function TelephonePage() {
                         <div className="flex items-center gap-2.5">
                           <div className={cn('h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0',
                             missed ? 'bg-red-100 text-red-600' : inbound ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700')}>
-                            {initials(displayName, String(call.from))}
+                            {initials(displayName, fmtPhone(cPhone))}
                           </div>
                           <div>
                             <div className={cn('text-[13px] font-semibold', name ? 'text-slate-800' : 'text-slate-400')}>
                               {displayName}
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono">{fmtPhone(call.from)}</div>
+                            <div className="text-[11px] text-slate-400 font-mono">{fmtPhone(cPhone)}</div>
                           </div>
                           {log?.lead && (
                             <Link href={`/leads/${log.lead.id}`} className="text-blue-400 hover:text-blue-600" title={log.lead.name}>
