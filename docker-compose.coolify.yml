@@ -40,6 +40,7 @@ services:
 
   evolution:
     image: atendai/evolution-api:v2.2.3
+    pull_policy: if_not_present
     restart: unless-stopped
     depends_on:
       db:
