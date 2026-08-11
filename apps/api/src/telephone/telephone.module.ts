@@ -148,21 +148,60 @@ class TelephoneService {
       const agent = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
       const agentName  = agent?.name  || userId;
       const agentEmail = agent?.email || undefined;
+      // Fetch full branch for email + WhatsApp fields
+      const fullBranch = testDriveBranchId
+        ? await this.prisma.branch.findUnique({ where: { id: testDriveBranchId } })
+        : await this.prisma.branch.findFirst({ where: { id: (branch as any)?.id } });
+
+      const alertData = {
+        callerName: data.callerName || callerPhone || 'Unknown',
+        callerPhone: callerPhone || 'Unknown',
+        branchName: fullBranch?.name || branch?.name || 'Unknown',
+        agentName,
+        agentEmail,
+        callTime: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+      };
+
+      // Email
       if (branch?.email) {
-        await this.mail.sendTestDriveAlert(branch.email, {
-          callerName: data.callerName || callerPhone || 'Unknown',
-          callerPhone: callerPhone || 'Unknown',
-          branchName: branch.name,
-          agentName,
-          agentEmail,
-          callTime: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-        });
+        await this.mail.sendTestDriveAlert(branch.email, alertData);
       } else {
-        this.logger.warn(`No email configured for branch — test drive alert skipped (branchId=${testDriveBranchId ?? 'auto'})`);
+        this.logger.warn(`No email configured for branch — email alert skipped (branchId=${testDriveBranchId ?? 'auto'})`);
       }
+
+      // WhatsApp
+      const waText = `🚗 *Test Drive Request*\n\n*Branch:* ${alertData.branchName}\n*Customer:* ${alertData.callerName}\n*Phone:* +${alertData.callerPhone}\n*Agent:* ${alertData.agentName}\n*Time:* ${alertData.callTime}\n\nPlease follow up to schedule the test drive.`;
+      await this.sendWhatsAppAlert(fullBranch, waText);
     }
 
     return log;
+  }
+
+  private async sendWhatsAppAlert(branch: any, text: string) {
+    const evoUrl      = (process.env.WHATSAPP_API_URL || '').replace(/\/$/, '');
+    const evoKey      = process.env.WHATSAPP_API_TOKEN || process.env.EVOLUTION_API_KEY || '';
+    const evoInstance = process.env.WHATSAPP_PHONE_ID  || process.env.WHATSAPP_INSTANCE || 'rainland';
+    if (!evoUrl || !evoKey) { this.logger.warn('WhatsApp not configured — skipping WA alert'); return; }
+
+    const headers = { apikey: evoKey, 'Content-Type': 'application/json' };
+    const send = async (number: string) => {
+      try {
+        const r = await fetch(`${evoUrl}/message/sendText/${evoInstance}`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ number, text }),
+        });
+        if (!r.ok) this.logger.warn(`WA send to ${number} failed: ${r.status}`);
+        else this.logger.log(`WA alert sent to ${number}`);
+      } catch (e: any) {
+        this.logger.warn(`WA send error (${number}): ${e.message}`);
+      }
+    };
+
+    if (branch?.whatsapp)      await send(branch.whatsapp);
+    if (branch?.whatsappGroup) await send(branch.whatsappGroup);
+    if (!branch?.whatsapp && !branch?.whatsappGroup) {
+      this.logger.warn(`No WhatsApp number or group configured for branch ${branch?.name} — WA alert skipped`);
+    }
   }
 
   searchLeads(mobile: string) {

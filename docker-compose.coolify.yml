@@ -1,9 +1,10 @@
 # Coolify-ready stack for Rainland CRM backend
 # Services:
-#   db    - PostgreSQL 15
-#   redis - Redis 7 (cache / queues)
-#   api   - Rainland NestJS API (built from ./apps/api)
-#   n8n   - Workflow automation
+#   db        - PostgreSQL 15
+#   redis     - Redis 7 (cache / queues)
+#   api       - Rainland NestJS API (built from ./apps/api)
+#   evolution - Evolution API v2 (WhatsApp gateway)
+#   n8n       - Workflow automation
 
 version: "3.9"
 
@@ -37,6 +38,42 @@ services:
     expose:
       - "6379"
 
+  evolution:
+    image: atendai/evolution-api:v2.2.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8080"
+      SERVER_URL: http://${SERVICE_FQDN_EVOLUTION_API}
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/6
+      CACHE_REDIS_TTL: "604800"
+      CACHE_LOCAL_ENABLED: "false"
+      QRCODE_LIMIT: "30"
+      LOG_LEVEL: ERROR
+      LOG_COLOR: "true"
+      DEL_INSTANCE: "false"
+    volumes:
+      - rainland_evolution:/evolution/instances
+    expose:
+      - "8080"
+    labels:
+      - coolify.managed=true
+
   api:
     build:
       context: ./apps/api
@@ -47,6 +84,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      evolution:
+        condition: service_started
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -55,11 +94,18 @@ services:
       JWT_EXPIRES_IN: "7d"
       WEB_ORIGIN: ${WEB_ORIGIN}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      SMTP_FROM: ${SMTP_FROM}
+      # WhatsApp — points to the evolution container on the internal Docker network
+      WHATSAPP_API_URL: http://evolution:8080
+      WHATSAPP_API_TOKEN: ${EVOLUTION_API_KEY}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_INSTANCE}
+      # Microsoft Graph (mail)
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+      MAIL_FROM: ${MAIL_FROM}
+      # TeleCMI
+      TELECMI_APP_ID: ${TELECMI_APP_ID}
+      TELECMI_SECRET: ${TELECMI_SECRET}
     expose:
       - "4000"
     labels:
@@ -95,18 +141,4 @@ volumes:
   rainland_pgdata:
   rainland_redis:
   rainland_n8n:
-
-# ----------------------------------------------------------------------
-# Required env vars (configure in Coolify > Application > Environment):
-#
-#   POSTGRES_USER             rainland
-#   POSTGRES_PASSWORD         <strong-random>
-#   POSTGRES_DB               rainland_crm
-#   JWT_SECRET                <32+ char random>
-#   WEB_ORIGIN                https://crm.rainlandautocorp.com
-#   REDIS_PASSWORD            <strong-random>
-#   N8N_HOST                  n8n.your-domain.com
-#   N8N_USER                  admin
-#   N8N_PASSWORD              <strong-random>
-#   RAINLAND_SERVICE_TOKEN    <jwt-from-admin-login>
-# ----------------------------------------------------------------------
+  rainland_evolution:

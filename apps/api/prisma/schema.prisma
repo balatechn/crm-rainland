@@ -47,15 +47,17 @@ enum WhatsAppDirection {
 
 // ============ MASTERS ============
 model Branch {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  city      String
-  pincode   String?
-  address   String?
-  phone     String?
-  email     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String   @unique
+  city           String
+  pincode        String?
+  address        String?
+  phone          String?
+  email          String?
+  whatsapp       String?  // individual WhatsApp number e.g. 919606619561
+  whatsappGroup  String?  // group JID e.g. 120363xxxxx@g.us
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
 
   users     User[]
   leads     Lead[]
