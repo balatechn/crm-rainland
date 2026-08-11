@@ -84,8 +84,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      evolution:
-        condition: service_started
     environment:
       NODE_ENV: production
       PORT: 4000

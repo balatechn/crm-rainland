@@ -6,7 +6,7 @@ import {
   Users, Phone, Car, Building2,
   CalendarCheck, ClipboardList, BarChart3,
   LogOut, Menu, X, ShieldCheck, History, ChevronDown,
-  Bell, Search, UserCircle, Store, BellRing, PhoneCall,
+  Bell, Search, UserCircle, Store, BellRing, PhoneCall, MessageCircle,
 } from 'lucide-react';
 import { getToken, getUser, setToken, setUser, api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,8 @@ const ADMIN_ITEMS: NavItem[] = [
   { href: '/masters/vehicles', label: 'Vehicles',     icon: Car,         roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
   { href: '/masters/sources',  label: 'Lead Sources', icon: Phone,       roles: ['ADMIN','CRM_MANAGER','SALES_HEAD'] },
   { href: '/users',            label: 'Users',        icon: ShieldCheck, roles: ['ADMIN','CRM_MANAGER'] },
-  { href: '/audit',            label: 'Audit Logs',   icon: History,     roles: ['ADMIN','CRM_MANAGER'] },
+  { href: '/audit',            label: 'Audit Logs',   icon: History,        roles: ['ADMIN','CRM_MANAGER'] },
+  { href: '/whatsapp',         label: 'WhatsApp',     icon: MessageCircle,  roles: ['ADMIN','CRM_MANAGER'] },
 ];
 
 // ── Dropdown ──────────────────────────────────────────────────────────────────
